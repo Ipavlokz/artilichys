@@ -18,7 +18,10 @@ class Pipeline:
         self.acquisition = Acquisition(metadata)
         self.filter = CausalFilter(metadata.sample_rate, config)
         self.normalizer = Normalizer(config)
-        self.mapper = VisualMapper(config)
+        feature_available = {key: True for key in FEATURE_KEYS}
+        feature_available["posterior_alpha"] = bool(metadata.groups.get("posterior"))
+        feature_available["lateral_balance"] = bool(metadata.groups.get("left") and metadata.groups.get("right"))
+        self.mapper = VisualMapper(config, available_features=feature_available)
         self.recorder = None
         if record_path is not None:
             self.recorder = SessionRecorder(record_path, metadata, config,
@@ -171,6 +174,7 @@ class Pipeline:
         valid = self.quality.valid and self.normalizer.ready and not stale
         status = {**self.quality.to_dict(), "connected": self.connected, "stale": stale,
                   "valid": valid, "calibrated": self.normalizer.ready,
+                  "visual_available": self.mapper.available.copy(),
                   "posterior_available": bool(self.metadata.groups.get("posterior")),
                   "lateral_available": bool(self.metadata.groups.get("left") and self.metadata.groups.get("right"))}
         if stale:
@@ -182,7 +186,7 @@ class Pipeline:
         # Blink is a separate physical event, allowed even when its EEG window is rejected.
         visual["pulse"] = int(events["blink"] and self.connected and not stale)
         self.pending = {key: 0 for key in self.pending}
-        values = messages(status, self.normalized, events, visual)
+        values = messages(status, self.normalized, events, visual, self.config.visual_addresses)
         result = {"timestamp": now, "status": status, "features": self.normalized.copy(),
                   "events": events, "visual": visual, "osc": values}
         self.log("controls", result)

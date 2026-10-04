@@ -55,6 +55,22 @@ def test_real_recording_calibrates_and_produces_controls_while_retaining_rejecti
     assert sum(row["kind"] == "sample_gap" for row in events) == 3
 
 
+def test_custom_art_changes_controls_but_preserves_real_eeg_and_quality(tmp_path):
+    original, custom = tmp_path / "original", tmp_path / "custom"
+    run(ReplaySource(RECORDING, speed=0), Config(), record=original, osc=False, print_interval=0)
+    run(ReplaySource(RECORDING, speed=0), Config.load("examples/visual-custom.json"),
+        record=custom, osc=False, print_interval=0)
+    for name in ("raw.jsonl", "processed.jsonl", "features.jsonl", "quality.jsonl", "events.jsonl"):
+        assert (original / name).read_bytes() == (custom / name).read_bytes()
+    before = [json.loads(line) for line in (original / "controls.jsonl").read_text().splitlines()]
+    after = [json.loads(line) for line in (custom / "controls.jsonl").read_text().splitlines()]
+    assert len(before) == len(after)
+    assert any(abs(a["visual"]["color"] - b["visual"]["color"]) > 0.01 for a, b in zip(before, after))
+    assert any(row["status"]["valid"] and row["status"]["visual_available"]["coherence"] for row in after)
+    assert all(not row["status"]["posterior_available"] for row in after)
+    assert all(row["osc"]["/arte/tono"] == row["visual"]["color"] for row in after)
+
+
 def test_a_missing_packet_inside_one_block_resets_filter_and_feature_history(tmp_path):
     metadata = SimulatedSource(duration=1, speed=0).metadata
     pipeline = Pipeline(metadata, Config(), tmp_path / "gap")

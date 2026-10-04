@@ -1,7 +1,10 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import json
 import math
 from pathlib import Path
+import re
+
+from .contracts import CONTINUOUS_VISUAL, DEFAULT_MAPPING, DEFAULT_OSC_ADDRESSES, FEATURE_KEYS, VISUAL_KEYS
 
 
 @dataclass
@@ -28,9 +31,56 @@ class Config:
     hold_seconds: float = 1.0
     idle_seconds: float = 2.0
     event_refractory: float = 0.5
+    visual_mapping: dict = field(default_factory=dict)
+    osc_addresses: dict = field(default_factory=dict)
+
+    @property
+    def mapping_rules(self):
+        return {**DEFAULT_MAPPING, **self.visual_mapping}
+
+    @property
+    def visual_addresses(self):
+        return {**DEFAULT_OSC_ADDRESSES, **self.osc_addresses}
+
+    def validate_artistic(self):
+        if not isinstance(self.visual_mapping, dict):
+            raise ValueError("visual_mapping debe ser un objeto JSON de controles -> características")
+        if set(self.visual_mapping) - set(CONTINUOUS_VISUAL):
+            raise ValueError(f"Control desconocido en visual_mapping; usar {', '.join(CONTINUOUS_VISUAL)}")
+        for control, rule in self.mapping_rules.items():
+            if isinstance(rule, str):
+                if rule not in FEATURE_KEYS:
+                    raise ValueError(f"Característica desconocida para {control}: {rule}; usar {', '.join(FEATURE_KEYS)}")
+                continue
+            if not isinstance(rule, dict) or set(rule) - {"weights", "invert"}:
+                raise ValueError(f"Regla de {control}: usar nombre de característica o weights/invert")
+            weights = rule.get("weights")
+            if not isinstance(weights, dict) or not weights or set(weights) - set(FEATURE_KEYS):
+                raise ValueError(f"weights de {control} requiere características conocidas y al menos un peso")
+            if any(isinstance(weight, bool) or not isinstance(weight, (int, float))
+                   or not math.isfinite(weight) or weight < 0 for weight in weights.values()):
+                raise ValueError(f"weights de {control}: pesos finitos >= 0")
+            total = sum(weights.values())
+            if not math.isfinite(total) or total <= 0:
+                raise ValueError(f"weights de {control}: la suma debe ser finita y positiva")
+            if not isinstance(rule.get("invert", False), bool):
+                raise ValueError(f"invert de {control} debe ser true o false")
+        if not isinstance(self.osc_addresses, dict) or set(self.osc_addresses) - set(VISUAL_KEYS):
+            raise ValueError(f"osc_addresses requiere nombres de controles: {', '.join(VISUAL_KEYS)}")
+        for control, address in self.visual_addresses.items():
+            if (not isinstance(address, str) or len(address) > 128
+                    or re.fullmatch(r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", address) is None):
+                raise ValueError(f"Dirección OSC inválida para {control}: comenzar con /, sin espacios/patrones, máximo 128 caracteres")
+            if address == "/neuro" or address.startswith("/neuro/"):
+                raise ValueError("Las direcciones /neuro están reservadas para descriptores y estado EEG")
+        if len(set(self.visual_addresses.values())) != len(VISUAL_KEYS):
+            raise ValueError("Direcciones OSC duplicadas: cada control necesita una dirección distinta")
 
     def validate(self, sample_rate):
+        self.validate_artistic()
         for name, value in asdict(self).items():
+            if name in ("visual_mapping", "osc_addresses"):
+                continue
             if value is not None and (not isinstance(value, (int, float)) or not math.isfinite(value)):
                 raise ValueError(f"Configuración inválida: {name}")
         if not (0 < self.low_hz < self.high_hz < sample_rate / 2):
@@ -54,11 +104,18 @@ class Config:
             raise ValueError("line_hz debe ser positiva o null")
 
     @classmethod
-    def load(cls, path=None):
+    def load(cls, path=None, base=None):
         if path is None:
-            return cls()
+            return cls(**base.to_dict()) if base is not None else cls()
         try:
-            return cls(**json.loads(Path(path).read_text(encoding="utf-8")))
+            overrides = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+            if not isinstance(overrides, dict):
+                raise ValueError("La configuración debe ser un objeto JSON")
+            values = base.to_dict() if base is not None else {}
+            for key in ("visual_mapping", "osc_addresses"):
+                if isinstance(overrides.get(key), dict):
+                    overrides[key] = {**values.get(key, {}), **overrides[key]}
+            return cls(**{**values, **overrides})
         except (TypeError, json.JSONDecodeError) as exc:
             raise ValueError(f"Configuración JSON inválida: {exc}") from exc
 

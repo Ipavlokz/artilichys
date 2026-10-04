@@ -1,0 +1,13 @@
+{
+  "visual_mapping": {
+    "color": {
+      "weights": {"alpha": 0.7, "theta": 0.3}
+    },
+    "intensity": {
+      "weights": {"beta": 1},
+      "invert": true
+    },
+    "flow": "theta",
+    "coherence": "spectral_balance"
+  }
+}

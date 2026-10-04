@@ -19,7 +19,7 @@ def json_file(path):
 
 
 def output_options(parser):
-    parser.add_argument("--config", help="Configuración JSON del procesamiento")
+    parser.add_argument("--config", help="Configuración JSON: procesamiento, reglas visuales y nombres OSC")
     parser.add_argument("--record", help="Directorio nuevo de sesión")
     parser.add_argument("--osc-host", default="127.0.0.1")
     parser.add_argument("--osc-port", type=int, default=9000)
@@ -106,12 +106,9 @@ def main(argv=None):
                 print(json.dumps(inspect_source(source), indent=2, ensure_ascii=False, allow_nan=False))
                 return 0
             record = args.record
-            if args.config:
-                config = Config.load(args.config)
-            elif Path(args.path).suffix.lower() != ".csv":
-                config = Config(**session_manifest(args.path)["config"])
-            else:
-                config = Config()
+            base = (Config(**session_manifest(args.path)["config"])
+                    if Path(args.path).suffix.lower() != ".csv" else Config())
+            config = Config.load(args.config, base=base)
         if args.markers:
             source = MarkedSource(source, args.markers)
         summary = run(source, config, record=record, osc_host=args.osc_host, osc_port=args.osc_port,

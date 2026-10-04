@@ -2,10 +2,11 @@ from pythonosc.osc_bundle_builder import IMMEDIATELY, OscBundleBuilder
 from pythonosc.osc_message_builder import OscMessageBuilder
 from pythonosc.udp_client import UDPClient
 
-FEATURE_KEYS = ("theta", "alpha", "beta", "posterior_alpha", "spectral_balance", "lateral_balance")
+from .contracts import DEFAULT_OSC_ADDRESSES, FEATURE_KEYS
 
 
-def messages(status, features, events, visual):
+def messages(status, features, events, visual, visual_addresses=None):
+    addresses = DEFAULT_OSC_ADDRESSES if visual_addresses is None else visual_addresses
     result = {
         "/neuro/connected": int(status["connected"]),
         "/neuro/quality/global": float(status["global_score"]),
@@ -20,7 +21,7 @@ def messages(status, features, events, visual):
     result.update({f"/neuro/quality/ch{i + 1}": float(q) for i, q in enumerate(status["channels"])})
     result.update({f"/neuro/{key}": float(features[key]) for key in FEATURE_KEYS})
     result.update({f"/neuro/event/{key}": int(events.get(key, 0)) for key in ("blink", "muscle", "reconnect")})
-    result.update({f"/visual/{key}": int(value) if key in ("scene", "pulse") else float(value)
+    result.update({addresses[key]: int(value) if key in ("scene", "pulse") else float(value)
                    for key, value in visual.items()})
     return result
 

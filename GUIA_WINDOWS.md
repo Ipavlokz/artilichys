@@ -83,7 +83,7 @@ No necesitas «activar» el entorno: usamos directamente `.venv\Scripts\python.e
 .venv\Scripts\python.exe -m pytest -q
 ```
 
-Espera un mensaje como **`44 passed`**, que significa que las 44 comprobaciones terminaron correctamente. Un número mayor puede aparecer si añadimos pruebas en una actualización. Si instalaste mediante el archivo de doble clic, instala primero `.[dev]` con el comando anterior para disponer de pytest.
+Espera un mensaje que termine en **`passed`**, acompañado del número de comprobaciones correctas. La cantidad puede aumentar con las actualizaciones; el resultado verificado está en [VERIFICATION.md](VERIFICATION.md). Si instalaste mediante el archivo de doble clic, instala primero `.[dev]` con el comando anterior para disponer de pytest.
 
 ### 4. Comprobar la grabación incluida
 
@@ -143,6 +143,32 @@ Puedes abrirlos con Bloc de notas para comprobar que existen; no necesitas enten
 ```powershell
 .venv\Scripts\python.exe -m neurovisual replay sessions/mi-primera-prueba --display text
 ```
+
+## Cambiar qué mueve el color y cómo se llama el mensaje
+
+Ahora puedes hacerlo sin programar. Ya viene una alternativa preparada en `examples/visual-custom.json`. Abre el receptor OSC como en el paso 6 y, en la otra terminal, escribe:
+
+```powershell
+.venv\Scripts\python.exe -m neurovisual replay examples/recordings/openbci --config examples/visual-custom.json --display text --record sessions/mis-colores
+```
+
+Este ejemplo usa **theta para el color**, **beta para la intensidad**, **alfa para el flujo** y **balance espectral para la coherencia artística**. Envía los controles con nombres como `/arte/tono` y `/arte/brillo`. Los mensajes EEG como `/neuro/alpha` conservan sus nombres. En pantalla seguirás viendo `color`, `intensidad` y `flujo`; lo que cambia de nombre es el mensaje que recibe el visual.
+
+Para crear tu propia variante:
+
+1. Abre la carpeta `examples`, copia `visual-custom.json` y llama a la copia `mis-reglas.json`.
+2. Haz clic derecho sobre la copia y ábrela con **Bloc de notas**.
+3. Para hacer que alfa mueva el color, cambia `"color": "theta"` por `"color": "alpha"` en la parte `visual_mapping`.
+4. Para cambiar el nombre enviado, cambia `"color": "/arte/tono"` por `"color": "/mi_visual/color"` en la parte `osc_addresses`.
+5. Conserva las comillas, comas y llaves, guarda y ejecuta el mismo comando sustituyendo `examples/visual-custom.json` por `examples/mis-reglas.json`. Usa un nombre de sesión nuevo, por ejemplo `sessions/mis-colores-2`.
+
+JSON es el formato del archivo de opciones. Si falta una coma o escribes una entrada desconocida, el programa muestra un error; corrige el archivo y vuelve a ejecutar. Los nombres OSC deben empezar por `/`, ser distintos entre sí y no tener espacios, tildes ni `ñ`.
+
+Hay seis entradas disponibles: `theta`, `alpha`, `beta`, `posterior_alpha`, `spectral_balance` y `lateral_balance`. Las dos que dependen de posiciones de electrodos (`posterior_alpha` y `lateral_balance`) no están disponibles en esta grabación. Si las eliges, su control queda en espera. El ejemplo `visual-custom.json` utiliza únicamente entradas disponibles en el archivo incluido.
+
+El color enviado sigue siendo un número entre 0 y 1; el futuro visual decidirá a qué color concreto corresponde. Estas opciones no convierten las bandas en emociones. También se mantienen los bloqueos cuando la calidad falla.
+
+Las opciones se guardan junto a la sesión. Al repetirla con `replay sessions/mis-colores --display text`, se recuperan automáticamente. Si quieres probar mezclas, `examples/visual-mix.json` contiene un ejemplo comentado en el README; para empezar basta con cambiar una entrada a la vez.
 
 ## Probar fallos deliberados
 

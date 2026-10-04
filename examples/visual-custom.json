@@ -1,0 +1,16 @@
+{
+  "visual_mapping": {
+    "color": "theta",
+    "intensity": "beta",
+    "flow": "alpha",
+    "coherence": "spectral_balance"
+  },
+  "osc_addresses": {
+    "color": "/arte/tono",
+    "intensity": "/arte/brillo",
+    "flow": "/arte/flujo",
+    "coherence": "/arte/coherencia",
+    "pulse": "/arte/pulso",
+    "scene": "/arte/escena"
+  }
+}

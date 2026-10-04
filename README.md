@@ -80,6 +80,8 @@ neurovisual/
   artifacts.py          sospecha de parpadeo y músculo
   features.py           potencias por canal/grupo y relaciones
   normalization.py      línea base robusta fija y suavizado
+  config.py             parámetros y validación de reglas artísticas
+  contracts.py          nombres internos y valores iniciales del contrato
   mapping.py            controles, retención y vuelta gradual a espera
   output.py             contrato y bundles OSC
   recording.py          registros separados y serialización JSON estándar
@@ -124,7 +126,7 @@ Los controles continuos sólo toman nuevos objetivos de ventanas válidas y cali
 
 ## Contrato OSC
 
-Un bundle OSC inmediato por actualización. Flags/pulsos/escena son enteros; los valores continuos son float32. Cada pulso vale 1 una actualización y vuelve a 0; el consumidor debe detectar el flanco. UDP no garantiza entrega.
+Un bundle OSC inmediato por actualización. Flags/pulsos/escena son enteros; los valores continuos son float32. Cada pulso vale 1 una actualización y vuelve a 0; el consumidor debe detectar el flanco. UDP no garantiza entrega. La tabla muestra las direcciones y reglas iniciales; la sección siguiente explica cómo cambiar las visuales.
 
 | Dirección | Rango / significado |
 | --- | --- |
@@ -152,6 +154,35 @@ Un bundle OSC inmediato por actualización. Flags/pulsos/escena son enteros; los
 
 Con características inválidas se conserva el último descriptor normalizado; leer siempre el flag de validez. Antes de calibrar los descriptores 0–1 valen 0.5 y el lateral 0. Si no hay posiciones confirmadas, alfa posterior queda en 0.5 y lateral en 0, con `available=0`. El visual continuo sigue la política de espera, no esos valores retenidos. Una fuente puede estar conectada y detenida a la vez: `connected=1`, `stale=1`.
 
+## Cambiar las reglas visuales y los nombres OSC
+
+Se configuran mediante JSON, sin editar Python. [examples/visual-custom.json](examples/visual-custom.json) cambia theta → color, alfa → flujo y balance espectral → coherencia artística. También cambia las seis direcciones visuales a `/arte/tono`, `/arte/brillo`, `/arte/flujo`, `/arte/coherencia`, `/arte/pulso` y `/arte/escena`:
+
+```bash
+python -m neurovisual replay examples/recordings/openbci --config examples/visual-custom.json --display text
+python -m neurovisual run --config examples/visual-custom.json --scenario all --display text
+```
+
+`visual_mapping` elige las entradas de `color`, `intensity`, `flow` y `coherence`. Las entradas posibles son `theta`, `alpha`, `beta`, `posterior_alpha`, `spectral_balance` y `lateral_balance`. Basta especificar los controles que quieras cambiar. `osc_addresses` elige el nombre externo de cada control, incluidos `pulse` y `scene`; los nombres internos en los registros y la pantalla siguen siendo los mismos.
+
+Para mezclar entradas o invertir la respuesta, usar [examples/visual-mix.json](examples/visual-mix.json). Por ejemplo:
+
+```json
+{
+  "visual_mapping": {
+    "color": {"weights": {"alpha": 0.7, "theta": 0.3}},
+    "intensity": {"weights": {"beta": 1}, "invert": true}
+  },
+  "osc_addresses": {"color": "/arte/tono"}
+}
+```
+
+Los pesos se normalizan por su suma; deben ser finitos, no negativos y sumar más de cero. `invert: true` transforma el resultado en `1 − valor`. Para un control continuo, `lateral_balance` se transforma de −1…1 a 0…1 antes de combinarlo. Los controles permanecen en 0…1 y conservan el bloqueo por calidad, la retención y el retorno a espera. Si una regla depende de posiciones anatómicas no disponibles, ese control queda en espera; no se inventan valores ni se redistribuyen sus pesos. `status.visual_available` en `controls.jsonl` informa esa disponibilidad. Un peso cero no requiere esa entrada.
+
+Las direcciones OSC deben comenzar con `/`, ser únicas y usar letras ASCII, números, `/`, `_`, `-` o `.`; no se permiten espacios ni patrones. `/neuro` está reservado para estado y características EEG. Los errores de configuración se explican antes de crear la sesión. El receptor visual debe escuchar los nombres configurados. `color` sigue siendo un número 0–1: convertirlo a un tono o a RGB corresponde al consumidor artístico. La escena sigue en 0 y el pulso sigue derivando de un parpadeo sospechoso.
+
+Las reglas y los nombres se guardan en `metadata.json`. Replay los recupera automáticamente. `--config` aplica únicamente los campos indicados sobre la configuración guardada: los filtros y reglas no mencionados se conservan. Para volver a todas las reglas y direcciones iniciales, especificar ambos mapas de `examples/config.json`; ese archivo también restablece los parámetros de procesamiento iniciales.
+
 ## Grabaciones e importación
 
 Una sesión contiene:
@@ -177,7 +208,7 @@ Timestamps y `received_at` son segundos del mismo reloj monotónico de la fuente
 
 CSV requiere encabezado, timestamp numérico en segundos y ocho canales. `--metadata` es obligatorio y `--columns` permite cualquier orden/nombre externo; el mapa enumera `timestamp` y todos los nombres internos. Sin mapa los encabezados deben coincidir exactamente. No se infieren frecuencia, unidades ni posiciones. El ejemplo de metadatos es **sintético**, no debe copiarse para Unicorn sin confirmar sus campos. CSV no contiene conexión ni IMU en esta fase: para conservarlos usar sesiones JSONL.
 
-Replay temporiza según `received_at`, preserva timestamps y vuelve a ejecutar el pipeline usando por defecto la configuración guardada. Puede reproducirse el directorio o su `raw.jsonl` junto a `metadata.json`. `--config` permite reprocesar con otros filtros. No se restaura automáticamente `baseline.json`: la referencia se recalcula de los mismos crudos/condiciones, lo que permite verificar la reproducción. Para importar anotaciones reales: `replay ... --markers archivo.json`, con el esquema de `examples/markers.json` y timestamps del mismo reloj que la grabación.
+Replay temporiza según `received_at`, preserva timestamps y vuelve a ejecutar el pipeline usando por defecto la configuración guardada. Puede reproducirse el directorio o su `raw.jsonl` junto a `metadata.json`. `--config` permite cambiar filtros o reglas visuales conservando los campos no indicados. No se restaura automáticamente `baseline.json`: la referencia se recalcula de los mismos crudos/condiciones, lo que permite verificar la reproducción. Para importar anotaciones reales: `replay ... --markers archivo.json`, con el esquema de `examples/markers.json` y timestamps del mismo reloj que la grabación.
 
 ## Cómo estudiar cambios asociados a música
 

@@ -20,5 +20,19 @@
   "smooth_seconds": 0.5,
   "hold_seconds": 1.0,
   "idle_seconds": 2.0,
-  "event_refractory": 0.5
+  "event_refractory": 0.5,
+  "visual_mapping": {
+    "color": "alpha",
+    "intensity": "beta",
+    "flow": "theta",
+    "coherence": "posterior_alpha"
+  },
+  "osc_addresses": {
+    "color": "/visual/color",
+    "intensity": "/visual/intensity",
+    "flow": "/visual/flow",
+    "coherence": "/visual/coherence",
+    "pulse": "/visual/pulse",
+    "scene": "/visual/scene"
+  }
 }

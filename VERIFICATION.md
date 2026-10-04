@@ -2,7 +2,7 @@
 
 Verificado el 3 de octubre de 2026 (America/Mexico_City), en este workspace Linux. No se conectó un Unicorn. Windows tiene instrucciones y un workflow de CI, pero no se ejecutó manualmente en este entorno.
 
-**Actualización con grabación real:** la suite actual tiene **44 pruebas**, todas correctas. Se añadió una muestra oficial OpenBCI lista para reproducción y una guía para principiantes en Windows. Los resultados iniciales siguientes corresponden a la primera implementación; la verificación de la actualización aparece al final.
+**Estado actual:** la suite tiene **65 pruebas**, todas correctas. Incluye una muestra oficial OpenBCI lista para reproducción, guía para principiantes en Windows y configuración de reglas visuales y nombres OSC. Los resultados iniciales siguientes corresponden a la primera implementación; las verificaciones de las actualizaciones aparecen al final.
 
 ## Instalación y pruebas
 
@@ -93,3 +93,27 @@ Resultados actuales: **44 pruebas pasaron en 11.72 s**, sin dependencias incompa
 Se reprodujeron además los 60 segundos en tiempo real con un receptor UDP separado: **901 bundles OSC**, 32 direcciones, 275 frames con características válidas y 16 pulsos de sospecha muscular. Los registros crudos, procesados y de características resultaron idénticos byte a byte entre la reproducción rápida y la real. Las sospechas de artefacto no se han contrastado contra anotaciones expertas.
 
 Los accesos `PROBAR_EEG.cmd` y `ESCUCHAR_OSC.cmd`, y `GUIA_WINDOWS.md`, se prepararon para Windows. La lógica Python está probada en Linux; los archivos de comandos Windows se revisaron, pero no se ejecutaron en una máquina Windows desde este entorno. El Unicorn y el experimento musical siguen pendientes de verificación.
+
+## Actualización: reglas visuales y nombres OSC configurables
+
+Se añadieron `visual_mapping` y `osc_addresses` a la configuración, manteniendo los valores iniciales. Se pueden seleccionar entradas, combinar pesos e invertir respuestas sin editar Python. Las posiciones anatómicas desconocidas dejan el control dependiente en espera. Las direcciones EEG permanecen reservadas; los nombres visuales se validan para evitar colisiones. La configuración artística se registra y se recupera al reproducir; las opciones parciales conservan los filtros guardados. Se acepta JSON UTF-8 con BOM para archivos guardados desde editores de Windows.
+
+Verificaciones ejecutadas en Linux:
+
+- `python -m pytest -q`: **65 pruebas pasaron en 15.90 s**.
+- `python -m pip check`: sin dependencias incompatibles; no se añadieron dependencias.
+- Compilación de `neurovisual` y `tests`, y `git diff --check`: correctas.
+- 21 pruebas nuevas: selección y mezcla de entradas, inversión, balance lateral, calidad/retención/recuperación, disponibilidad anatómica, errores claros, persistencia y cambios parciales, recepción UDP con nombres personalizados y conservación de los datos EEG reales al cambiar el arte.
+
+Grabación real con el ejemplo nuevo:
+
+```bash
+python -m neurovisual replay examples/recordings/openbci --config examples/visual-custom.json --speed 0 --no-osc --display text --record sessions/visual-custom-check
+python -m neurovisual replay sessions/visual-custom-check --speed 0 --no-osc --quiet --record sessions/visual-custom-replay-check
+```
+
+Ambas ejecuciones produjeron 901 actualizaciones, 117 ventanas válidas y 183 descartadas, con referencia lista. Los archivos `raw.jsonl`, `processed.jsonl`, `quality.jsonl`, `features.jsonl`, `events.jsonl`, `controls.jsonl` y `baseline.json` fueron idénticos byte a byte. El replay recuperó theta → color y `/arte/tono` desde los metadatos.
+
+Una simulación de 12 segundos con parpadeo, `examples/visual-custom.json` y receptor UDP independiente produjo **180 bundles**, 32 direcciones por bundle, 19 frames con características válidas y un pulso en `/arte/pulso`. Se recibieron las seis direcciones `/arte/...`; todos los controles continuos permanecieron en 0–1. La frecuencia nominal de salida fue 15 Hz.
+
+Los ejemplos `visual-custom.json` y `visual-mix.json` y sus comandos están explicados en README y GUIA_WINDOWS. No se ha ejecutado esta actualización en una computadora Windows ni en un Unicorn físico desde este workspace.
