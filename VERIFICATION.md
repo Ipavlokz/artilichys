@@ -2,7 +2,7 @@
 
 Verificado el 3 de octubre de 2026 (America/Mexico_City), en este workspace Linux. No se conectó un Unicorn. Windows tiene instrucciones y un workflow de CI, pero no se ejecutó manualmente en este entorno.
 
-**Estado actual:** la suite tiene **65 pruebas**, todas correctas. Incluye una muestra oficial OpenBCI lista para reproducción, guía para principiantes en Windows y configuración de reglas visuales y nombres OSC. Los resultados iniciales siguientes corresponden a la primera implementación; las verificaciones de las actualizaciones aparecen al final.
+**Estado actual:** la suite tiene **82 pruebas**, todas correctas. Incluye una muestra oficial OpenBCI lista para reproducción, guía para principiantes en Windows, configuración de reglas visuales/nombres OSC y anotaciones manuales de música/referencia. Los resultados iniciales siguientes corresponden a la primera implementación; las verificaciones de las actualizaciones aparecen al final.
 
 ## Instalación y pruebas
 
@@ -117,3 +117,29 @@ Ambas ejecuciones produjeron 901 actualizaciones, 117 ventanas válidas y 183 de
 Una simulación de 12 segundos con parpadeo, `examples/visual-custom.json` y receptor UDP independiente produjo **180 bundles**, 32 direcciones por bundle, 19 frames con características válidas y un pulso en `/arte/pulso`. Se recibieron las seis direcciones `/arte/...`; todos los controles continuos permanecieron en 0–1. La frecuencia nominal de salida fue 15 Hz.
 
 Los ejemplos `visual-custom.json` y `visual-mix.json` y sus comandos están explicados en README y GUIA_WINDOWS. No se ha ejecutado esta actualización en una computadora Windows ni en un Unicorn físico desde este workspace.
+
+## Actualización: anotaciones manuales e informe legible
+
+Se añadió `ManualMarkedSource`, un wrapper del contrato de fuentes con recepción local de anotaciones, sin cambiar la señal ni sus timestamps. `run/replay --manual-markers` recibe comandos `mark music/reference`; exige tiempo real y registro. El operador inicia sin música y las anotaciones reemplazan las condiciones anteriores. La respuesta confirma el timestamp de la fuente y la incorporación al siguiente bloque elegible. Se agregó `compare --display text`, sin cambiar el informe JSON ni su interpretación descriptiva.
+
+Verificaciones:
+
+- `python -m pytest -q`: **82 pruebas pasaron en 24.76 s**, en Linux.
+- 17 pruebas nuevas cubren reloj absoluto, orden de marcas/bloques, conservación de muestras, ausencia de datos y desconexión, rechazo si la fuente termina antes de incorporar la marca, recepción y confirmación UDP, receptor ausente, argumentos incompatibles, esquema de archivo y reemplazo de condiciones, liberación del puerto ante configuración inválida, reproducción y comparación de señal conocida.
+- Compilación de módulos y `git diff --check`: correctas. `pip check`: sin dependencias incompatibles. No se añadieron dependencias.
+- El ensayo automatizado de 96 segundos de señal simulada, con anotaciones por UDP y ejecución acelerada mediante el reloj de prueba, recuperó el cambio alfa de ch1–4 y conservó byte a byte crudos, características, eventos y controles al reproducirse. El modo acelerado es sólo de la prueba del wrapper; la CLI manual exige velocidad 1.
+
+Se ejecutaron además procesos independientes en tiempo real durante 18 segundos, con 4,500 muestras simuladas. Dos invocaciones reales de `mark` obtuvieron confirmación: `music` a 10.564 s y `reference` a 14.644 s, más la referencia inicial a 0 s. Los registros conservaron las etiquetas y su origen manual; nunca aparecieron marcas posteriores a `received_at` en un bloque. Hubo 70 ventanas EEG válidas y 30 ventanas etiquetadas como transición.
+
+```bash
+python -m neurovisual run --duration 18 --manual-markers --display text --no-osc --record sessions/manual-markers-realtime
+# En otra terminal, con separación temporal:
+python -m neurovisual mark music --label "Ensayo de anotacion; EEG simulado"
+python -m neurovisual mark reference --label "Fin del periodo"
+python -m neurovisual compare sessions/manual-markers-realtime --display text --output sessions/manual-markers-realtime/comparison.json
+python -m neurovisual replay sessions/manual-markers-realtime --speed 0 --no-osc --quiet --record sessions/manual-markers-replay-check
+```
+
+El ensayo ejecutado usó un puerto local libre pasado en `--marker-port` y `mark --port`; los comandos anteriores muestran el puerto inicial 9001. `raw.jsonl`, `processed.jsonl`, `quality.jsonl`, `features.jsonl`, `events.jsonl` y `baseline.json` resultaron idénticos byte a byte al reproducirlo. `compare` seleccionó cuatro ventanas de referencia y una de música: mostró correctamente evidencia insuficiente en los 24 resultados, ya que el ensayo breve verifica transporte y registro y no alcanza el mínimo de cinco por condición. Los controles en tiempo real y replay pueden tener distinta fase de ticks OSC; la cronología de las mediciones y marcas se conserva.
+
+Se prepararon `ENSAYAR_MARCADORES.cmd` y `MARCAR_MUSICA.cmd`, con instrucciones en GUIA_WINDOWS. Los accesos Windows se revisaron, pero no se ejecutaron en Windows desde este entorno. Las anotaciones son manuales y no verifican el audio ni su inicio acústico; el retraso del operador y del comando sigue pendiente de una sincronización automática. El Unicorn físico y un experimento musical humano continúan pendientes.

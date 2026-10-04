@@ -5,11 +5,11 @@ from pathlib import Path
 import time
 import uuid
 
-from .analysis import compare_conditions
+from .analysis import compare_conditions, readable_comparison
 from .config import Config
 from .runner import run
 from .sources import ReplaySource, SimulatedSource
-from .sources.markers import MarkedSource
+from .sources.markers import ManualMarkedSource, MarkedSource, send_marker
 from .sources.replay import inspect_source, session_manifest
 from .sources.simulated import SCENARIOS
 
@@ -28,6 +28,8 @@ def output_options(parser):
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--display", choices=["json", "text"], default="json", help="text = estado legible para principiantes")
     parser.add_argument("--markers", help="Marcadores reference/music con timestamps de la fuente")
+    parser.add_argument("--manual-markers", action="store_true", help="Recibir anotaciones locales con el comando mark; sólo speed 1")
+    parser.add_argument("--marker-port", type=int, default=9001, help="Puerto local de anotaciones; distinto del OSC visual")
 
 
 def replay_options(parser):
@@ -56,6 +58,11 @@ def parser_for_cli():
     compare = commands.add_parser("compare", help="Comparar periodos music/reference por canal y banda")
     compare.add_argument("path")
     compare.add_argument("--output", help="Guardar informe JSON")
+    compare.add_argument("--display", choices=["json", "text"], default="json", help="text = informe legible; --output siempre guarda JSON")
+    mark = commands.add_parser("mark", help="Marcar música/referencia en una sesión abierta con --manual-markers")
+    mark.add_argument("condition", choices=["music", "reference"])
+    mark.add_argument("--port", type=int, default=9001)
+    mark.add_argument("--label", default="", help="Canción u observación opcional")
     listen = commands.add_parser("listen", help="Receptor OSC local para comprobar el contrato")
     listen.add_argument("--host", default="127.0.0.1")
     listen.add_argument("--port", type=int, default=9000)
@@ -67,6 +74,18 @@ def main(argv=None):
     parser = parser_for_cli()
     args = parser.parse_args(argv)
     try:
+        if args.command == "mark":
+            response = send_marker(args.condition, args.port, args.label)
+            print(f"Marcador recibido: {response['condition']} | tiempo de fuente={response['timestamp']:.3f} s | {response['label']}")
+            return 0
+        if args.command in ("run", "replay"):
+            if args.manual_markers and (args.speed != 1 or args.markers):
+                raise ValueError("--manual-markers requiere --speed 1 y no puede combinarse con --markers")
+            if args.manual_markers and not 1 <= args.marker_port <= 65535:
+                raise ValueError("Puerto de marcadores fuera de rango: 1–65535")
+            if args.manual_markers and (args.command == "run" and args.no_record
+                                        or args.command == "replay" and not args.record):
+                raise ValueError("Los marcadores manuales requieren guardar una sesión; usar --record y no --no-record")
         if args.command == "listen":
             from pythonosc.dispatcher import Dispatcher
             from pythonosc.osc_server import BlockingOSCUDPServer
@@ -87,7 +106,7 @@ def main(argv=None):
             encoded = json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False)
             if args.output:
                 Path(args.output).write_text(encoded + "\n", encoding="utf-8")
-            print(encoded)
+            print(readable_comparison(report) if args.display == "text" else encoded)
             return 0
         if args.command == "run":
             params = json_file(args.sim_config) or {}
@@ -111,6 +130,9 @@ def main(argv=None):
             config = Config.load(args.config, base=base)
         if args.markers:
             source = MarkedSource(source, args.markers)
+        if args.manual_markers:
+            source = ManualMarkedSource(source, args.marker_port)
+            print(f"Marcadores escuchando en 127.0.0.1:{source.port}. Iniciar SIN música; usar mark music/reference en otra terminal. El programa no controla el audio.", flush=True)
         summary = run(source, config, record=record, osc_host=args.osc_host, osc_port=args.osc_port,
                       osc=not args.no_osc, print_interval=0 if args.quiet else 1, display=args.display)
         if args.display == "text":

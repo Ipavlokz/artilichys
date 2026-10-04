@@ -12,14 +12,15 @@ def readable_status(state, elapsed):
     return (f"{elapsed:5.1f} s | conexion={'SI' if status['connected'] else 'NO'} | "
             f"calidad={status['global_score']:.2f} | calibracion={'LISTA' if status['calibrated'] else 'PENDIENTE'} | "
             f"ventana={'VALIDA' if status['valid'] else 'INVALIDA'} | {bands} | "
-            f"color={visual['color']:.2f} intensidad={visual['intensity']:.2f} flujo={visual['flow']:.2f} | motivos={reasons}")
+            f"color={visual['color']:.2f} intensidad={visual['intensity']:.2f} flujo={visual['flow']:.2f} | "
+            f"condicion={status['condition']} | motivos={reasons}")
 
 
 def run(source, config, record=None, osc_host="127.0.0.1", osc_port=9000, osc=True,
         print_interval=1.0, duration=None, display="json"):
     if display not in ("json", "text"):
         raise ValueError("display debe ser json o text")
-    pipeline = Pipeline(source.metadata, config, record)
+    pipeline = None
     output = None
     next_tick = source.now()
     origin = next_tick
@@ -38,12 +39,14 @@ def run(source, config, record=None, osc_host="127.0.0.1", osc_port=9000, osc=Tr
                 print(json.dumps(clean({"t": round(timestamp - origin, 2), "connected": state["status"]["connected"],
                                     "stale": state["status"]["stale"], "quality": state["status"]["global_score"],
                                     "valid": state["status"]["valid"], "calibrated": state["status"]["calibrated"],
+                                    "condition": state["status"]["condition"],
                                     "reasons": state["status"]["reasons"], "features": state["features"],
                                     "visual": state["visual"]}), allow_nan=False), flush=True)
             next_print = timestamp + print_interval
         ticks += 1
 
     try:
+        pipeline = Pipeline(source.metadata, config, record)
         output = OscOutput(osc_host, osc_port) if osc else None
         while not source.finished:
             block = source.read(1 / config.output_hz)
@@ -60,7 +63,8 @@ def run(source, config, record=None, osc_host="127.0.0.1", osc_port=9000, osc=Tr
             if duration is not None and now - origin >= duration:
                 break
     finally:
-        pipeline.close()
+        if pipeline is not None:
+            pipeline.close()
         source.close()
         if output:
             output.close()

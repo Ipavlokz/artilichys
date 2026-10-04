@@ -174,6 +174,7 @@ class Pipeline:
         valid = self.quality.valid and self.normalizer.ready and not stale
         status = {**self.quality.to_dict(), "connected": self.connected, "stale": stale,
                   "valid": valid, "calibrated": self.normalizer.ready,
+                  "condition": self.condition,
                   "visual_available": self.mapper.available.copy(),
                   "posterior_available": bool(self.metadata.groups.get("posterior")),
                   "lateral_available": bool(self.metadata.groups.get("left") and self.metadata.groups.get("right"))}

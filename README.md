@@ -73,7 +73,7 @@ neurovisual/
   sources/base.py       contrato de fuente en vivo y temporización de archivos
   sources/simulated.py  ocho canales, bandas y fallos programables
   sources/replay.py     sesión JSONL / CSV y validación completa
-  sources/markers.py    anotaciones externas de condiciones
+  sources/markers.py    anotaciones de archivo o manuales con reloj de la fuente
   acquisition.py        validación sin reordenar o reescribir timestamps/canales
   quality.py            faltantes, plano, amplitud y movimiento IMU
   processing.py         notch + Butterworth SOS causal con estado
@@ -88,7 +88,7 @@ neurovisual/
   pipeline.py           coordinación; registro antes de validar/procesar
   runner.py             actualización OSC independiente de nuevas muestras
   analysis.py           comparación descriptiva de condiciones
-  cli.py                run / replay / inspect / compare / listen
+  cli.py                run / replay / inspect / compare / mark / listen
 tests/                  pruebas de señal, fallos, reproducción, CLI y UDP real
 examples/               configuración, CSV, metadatos, columnas y marcadores
 .github/workflows/      pruebas en Linux y Windows
@@ -223,6 +223,38 @@ El planteamiento necesita una comparación: observar alfa subir durante una canc
 Esto no es una prueba causal: no ajusta comparaciones múltiples y las ventanas no solapadas todavía pueden tener dependencia temporal. Es una herramienta exploratoria para el hackathon. En el simulador, música/referencia alternan cada 12 s, ch1–4 aumentan alfa gradualmente y ch5–8 actúan como controles sin esa modulación. No se reproduce audio; esos marcadores sólo validan el programa. En datos reales los marcadores deben corresponder al inicio/fin real del audio, no al reloj supuesto del simulador.
 
 Durante el evento conviene alternar bloques más largos (30–60 s), repetir condiciones, mantener postura y ojos constantes, registrar volumen/canción y contrabalancear el orden. Reservar la referencia inicial para calibrar. Mantener la misma normalización durante la comparación. Reportar descriptores, artefactos y evidencia limitada; confirmar o descartar un efecto musical requiere más datos y controles experimentales.
+
+### Marcar música y referencia durante una sesión
+
+Para ensayar sin hardware, abrir una sesión en tiempo real:
+
+```bash
+python -m neurovisual run --duration 180 --manual-markers --display text --record sessions/manual
+```
+
+Iniciar sin música y esperar a que la calibración esté lista. En otra terminal, después de iniciar o detener el reproductor de audio, enviar la anotación correspondiente:
+
+```bash
+python -m neurovisual mark music --label "Pista 1, volumen fijo"
+python -m neurovisual mark reference --label "Audio detenido"
+```
+
+Cada comando espera confirmación con el timestamp del reloj de la fuente. El wrapper `ManualMarkedSource` recibe solicitudes locales en `127.0.0.1:9001` y las incorpora al siguiente bloque cuyo tiempo de recepción alcance el de la anotación. No modifica EEG, IMU ni timestamps de muestras. Marca una referencia inicial y reemplaza las condiciones automáticas de la fuente; hay que iniciar realmente sin música. Los marcadores se conservan en `raw.jsonl` y `events.jsonl`, incluido durante bloques de desconexión, y se recuperan automáticamente al reproducir la sesión. `status.condition` y la pantalla muestran la condición vigente; una ventana que cruza un cambio se registra como `transition` y se excluye de `compare`.
+
+`--manual-markers` requiere velocidad 1 y registro de sesión; no se combina con `--markers`. Para otro puerto, usar `--marker-port 9002` en la sesión y `mark ... --port 9002`. Sólo es un canal local de anotaciones; no corresponde a un protocolo del Unicorn ni cambia el puerto OSC 9000. Si no llega confirmación, el comando explica el fallo; revisar `events.jsonl` antes de repetir una solicitud cuyo resultado sea incierto. Si la fuente termina antes de incorporar una anotación pendiente, se informa que no fue incorporada.
+
+Al terminar:
+
+```bash
+python -m neurovisual compare sessions/manual --display text --output sessions/manual/comparison.json
+python -m neurovisual replay sessions/manual --display text
+```
+
+`--display text` muestra un informe legible; `--output` siempre guarda JSON. Se necesita al menos cinco ventanas válidas no solapadas por condición; periodos cortos o con muchos artefactos pueden producir evidencia insuficiente. Las etiquetas manuales no cambian la modulación programada del simulador, ni controlan o verifican el audio. El ensayo comprueba anotación y reproducción; no permite estudiar una respuesta musical humana.
+
+La marca usa el momento en que la solicitud se lee en el programa, no el inicio acústico medido: incluye retraso del operador, arranque del comando y hasta la siguiente lectura del transporte. Para sincronización precisa hará falta integrar el reproductor o medir el audio y corregir latencias. No se deben añadir marcas actuales a una grabación antigua como OpenBCI para presentarla como un experimento musical. `--markers` sigue disponible para anotaciones previamente medidas, con timestamps únicos; las anotaciones explícitas de archivo también reemplazan las condiciones guardadas o sintéticas.
+
+En Windows están disponibles `ENSAYAR_MARCADORES.cmd` y `MARCAR_MUSICA.cmd`, explicados en [GUIA_WINDOWS.md](GUIA_WINDOWS.md). Para una fuente Unicorn confirmada, envolver el adaptador en `ManualMarkedSource` antes de llamar a `run`; no hace falta cambiar procesamiento ni consumidores.
 
 ## Añadir una fuente Unicorn LSL o UDP
 

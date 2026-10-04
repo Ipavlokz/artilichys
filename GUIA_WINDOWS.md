@@ -170,6 +170,42 @@ El color enviado sigue siendo un número entre 0 y 1; el futuro visual decidirá
 
 Las opciones se guardan junto a la sesión. Al repetirla con `replay sessions/mis-colores --display text`, se recuperan automáticamente. Si quieres probar mezclas, `examples/visual-mix.json` contiene un ejemplo comentado en el README; para empezar basta con cambiar una entrada a la vez.
 
+## Ensayar cómo marcar periodos con y sin música
+
+Un **marcador** es una nota con una hora: por ejemplo, «aquí indiqué que empezó la música». Servirá para comparar periodos cuando tengamos EEG del Unicorn. Puedes practicar ahora con el simulador.
+
+1. Después de instalar el programa, haz doble clic en **`ENSAYAR_MARCADORES.cmd`**. Se abre una sesión de tres minutos con EEG simulado y se crea una carpeta nueva para sus resultados.
+2. Haz doble clic en **`MARCAR_MUSICA.cmd`**. Es una segunda ventana con un menú: **M** para música, **R** para referencia sin música y **S** para cerrar el menú.
+3. Empieza sin música. En la primera ventana espera `calibracion=LISTA`. Conserva este periodo inicial de referencia durante unos 30 segundos.
+4. Si quieres ensayar con audio, pon una canción en tu reproductor habitual y pulsa **M** en el menú. Espera una confirmación como `Marcador recibido: music`. La primera ventana mostrará `condicion=music`.
+5. Tras unos 30–60 segundos, pausa la canción y pulsa **R**. Vuelve a esperar la confirmación. Repite si el tiempo restante lo permite.
+6. Al terminar los tres minutos, la primera ventana muestra un informe y guarda `comparison.json` junto a los otros archivos de la sesión. **S** sólo cierra el menú; la sesión se detiene al cumplirse su duración o con Ctrl+C en su propia ventana.
+
+El menú **no reproduce ni detiene música**. La hora corresponde a la recepción de tu anotación y puede retrasarse respecto al sonido real. En esta prueba, las mediciones vienen del simulador: aunque escuches música, no está midiendo tu cerebro y sus cambios siguen el programa sintético.
+
+También puedes hacerlo con comandos. Primera terminal:
+
+```powershell
+.venv\Scripts\python.exe -m neurovisual run --duration 180 --manual-markers --display text --record sessions/ensayo-manual
+```
+
+Segunda terminal, cuando corresponda cada acción:
+
+```powershell
+.venv\Scripts\python.exe -m neurovisual mark music --label "Cancion de prueba"
+.venv\Scripts\python.exe -m neurovisual mark reference --label "Musica pausada"
+```
+
+No copies los dos comandos de marcas de golpe: ejecútalos en momentos distintos. Una vez terminada la sesión, obtener el informe:
+
+```powershell
+.venv\Scripts\python.exe -m neurovisual compare sessions/ensayo-manual --display text --output sessions/ensayo-manual/comparison.json
+```
+
+El informe muestra, por canal y banda, **cambio observado**, **compatible con cambio pequeño** o **evidencia insuficiente**. La última etiqueta puede significar que faltan periodos limpios suficientemente largos. Ninguna etiqueta demuestra que la música haya causado un cambio ni mide emociones. Por ahora interpreta este ensayo como una prueba del funcionamiento del programa.
+
+Las notas quedan guardadas y se conservan al reproducir `sessions/ensayo-manual`. No uses estas marcas actuales para afirmar que la grabación OpenBCI incluida se realizó con esa canción; esa grabación no tiene anotaciones musicales. Con el Unicorn conectado podremos usar la misma herramienta durante una sesión real, manteniendo postura, ojos y volumen constantes y repitiendo periodos.
+
 ## Probar fallos deliberados
 
 La grabación real permite probar señal y sus problemas existentes. Para provocar específicamente una desconexión o un canal plano, usa el simulador:
@@ -200,5 +236,6 @@ Este modo procesa todo en pocos segundos. Para observar OSC o mostrarlo durante 
 | El puerto 9000 ya está en uso | Cierra el receptor OSC que abriste anteriormente |
 | No ves OSC | Abre el receptor antes de reproducir y comprueba que ambas terminales usan el mismo puerto |
 | Aparece `ventana=INVALIDA` | Lee los motivos; al principio y durante artefactos es esperado. En esta grabación habrá también ventanas válidas |
+| `No llegó confirmación` al marcar | Comprueba que el ensayo sigue abierto con `--manual-markers`; consulta `events.jsonl` antes de repetir una marca de resultado incierto |
 
 Por ahora no ejecutes `compare` sobre esta grabación para estudiar música: faltan esas anotaciones. El próximo paso con Unicorn es confirmar su salida y conectar su adaptador; esta demostración ya permite practicar el resto del recorrido.

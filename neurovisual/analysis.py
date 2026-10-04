@@ -7,6 +7,20 @@ import numpy as np
 from .sources.replay import session_manifest
 
 
+def readable_comparison(report):
+    counts = report["windows"]
+    lines = [f"Ventanas validas sin solapamiento: referencia={counts['reference']}, musica={counts['music']}.",
+             f"Minimo requerido por condicion: {report['minimum_per_condition']}."]
+    for finding in report["findings"]:
+        text = f"{finding['channel']} | {finding['band']} | {finding['classification'].replace('_', ' ')}"
+        if "percent_change" in finding:
+            low, high = finding["descriptive_interval_percent"]
+            text += f" | cambio={finding['percent_change']:+.1f}% | intervalo descriptivo=[{low:+.1f}%, {high:+.1f}%]"
+        lines.append(text)
+    lines.append(report["interpretation"])
+    return "\n".join(lines)
+
+
 def compare_conditions(path, min_windows=5, equivalence_fraction=0.2, seed=17):
     path = Path(path)
     if not path.is_dir():
