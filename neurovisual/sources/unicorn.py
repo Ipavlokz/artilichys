@@ -32,12 +32,23 @@ def load_sdk(path):
 class UnicornSource(Source):
     def __init__(self, sdk_path=None, serial=None, sdk=None):
         self.sdk = sdk if sdk is not None else load_sdk(sdk_path)
-        devices = list(self.sdk.GetAvailableDevices(True) or [])
+        try:
+            devices = list(self.sdk.GetAvailableDevices(True) or [])
+        except Exception as exc:
+            raise ValueError(f'No se pudo buscar el Unicorn por Bluetooth: {exc}') from exc
         if serial is None:
             if len(devices) != 1:
                 raise ValueError(f'Se requiere exactamente un Unicorn emparejado, o --device SERIAL. Encontrados: {devices}')
             serial = devices[0]
-        self.device = self.sdk.Unicorn(serial)
+        try:
+            self.device = self.sdk.Unicorn(serial)
+        except Exception as exc:
+            raise ValueError(
+                f'El SDK no pudo abrir el Unicorn {serial}. '
+                'Cerrar COMPLETAMENTE Unicorn Suite, Recorder y otros programas que usen el equipo; '
+                'comprobar que esta encendido, con bateria y emparejado en Windows. '
+                f'Si persiste, probar primero la conexion en Suite y cerrarlo antes de reintentar. Detalle SDK: {exc}'
+            ) from exc
         cfg = self.device.GetConfiguration()
         eeg = list(cfg.Channels)[int(self.sdk.EEGConfigIndex):int(self.sdk.EEGConfigIndex)+int(self.sdk.EEGChannelsCount)]
         if len(eeg) != 8 or not all(c.Enabled for c in eeg):

@@ -58,3 +58,12 @@ def test_unknown_units_are_rejected():
             cfg=super().GetConfiguration(); cfg.Channels[0].Unit='unknown'; return cfg
     api=sdk(); api.Unicorn=Bad
     with pytest.raises(ValueError, match='Unidad EEG'): UnicornSource(sdk=api)
+
+
+def test_connection_failure_has_actionable_error():
+    api = sdk()
+    def unavailable(serial):
+        raise RuntimeError("Couldn't connect to device")
+    api.Unicorn = unavailable
+    with pytest.raises(ValueError, match='Cerrar COMPLETAMENTE Unicorn Suite'):
+        UnicornSource(sdk=api)
