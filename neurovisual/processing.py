@@ -19,6 +19,7 @@ class CausalFilter:
     def reset(self):
         self.state = np.zeros((len(self.sos), 2, self.channels))
         self.last = np.zeros(self.channels)
+        self.initialized = False
 
     def apply(self, samples):
         if not len(samples):
@@ -30,6 +31,11 @@ class CausalFilter:
         for i, row in enumerate(safe):
             row[missing[i]] = self.last[missing[i]]
             self.last = row.copy()
+        if not self.initialized:
+            # Constant prehistory at the first available sample avoids inventing
+            # a huge start-up transient from real electrode DC offsets.
+            self.state = signal.sosfilt_zi(self.sos)[:, :, None] * safe[0][None, None, :]
+            self.initialized = True
         filtered, self.state = signal.sosfilt(self.sos, safe, axis=0, zi=self.state)
         filtered[missing] = np.nan
         return filtered

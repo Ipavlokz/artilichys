@@ -84,6 +84,7 @@ def inspect_source(source):
     missing = 0
     first = last = None
     disconnects = 0
+    timestamp_gaps = 0
     while not source.finished:
         block = source.read(0)
         if block is None:
@@ -93,8 +94,11 @@ def inspect_source(source):
         missing += int(np.isnan(block.samples).sum())
         disconnects += int(not block.connected)
         if len(block.timestamps):
+            steps = np.diff(block.timestamps if last is None else np.r_[last, block.timestamps])
+            timestamp_gaps += int(np.count_nonzero(steps > 1.5 / source.metadata.sample_rate))
             if first is None:
                 first = float(block.timestamps[0])
             last = float(block.timestamps[-1])
     return {"metadata": source.metadata.to_dict(), "samples": count, "missing_values": missing,
-            "first_timestamp": first, "last_timestamp": last, "disconnected_blocks": disconnects}
+            "first_timestamp": first, "last_timestamp": last, "disconnected_blocks": disconnects,
+            "timestamp_gaps": timestamp_gaps}

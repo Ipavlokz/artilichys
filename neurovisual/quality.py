@@ -33,7 +33,9 @@ def assess(raw, imu, config, complete=True):
         if np.ptp(good) < config.flat_uv:
             scores[ch] = 0
             reasons.append(f"flat:ch{ch + 1}")
-        if np.max(np.abs(good)) > config.amplitude_uv:
+        # Electrode DC offsets can be tens of millivolts. Assess excursions
+        # around the current past-window median without changing recorded data.
+        if np.max(np.abs(good - np.median(good))) > config.amplitude_uv:
             scores[ch] = 0
             reasons.append(f"amplitude:ch{ch + 1}")
     # Detect short flat segments too; not just a whole window that has gone flat.

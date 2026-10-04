@@ -90,21 +90,30 @@ class Pipeline:
             self.awaiting_reconnect = False
         self.seen_connection = True
         fs = self.metadata.sample_rate
-        if self.last_sample is not None and block.timestamps[0] - self.last_sample > 2 / fs:
+        if self.last_sample is not None and block.timestamps[0] - self.last_sample > 1.5 / fs:
             self.reset_signal()
             self.log("events", {"timestamp": block.received_at, "kind": "sample_gap"})
-        if self.settle_until is None:
-            self.settle_until = float(block.timestamps[0]) + self.config.settle_seconds
+        # A packet gap may occur inside a block, not only at its boundary.
+        starts = [0, *(np.flatnonzero(np.diff(block.timestamps) > 1.5 / fs) + 1).tolist()]
+        stops = [*starts[1:], len(block.timestamps)]
+        filtered = np.empty_like(block.samples)
+        for start, stop in zip(starts, stops):
+            if start:
+                self.reset_signal()
+                self.log("events", {"timestamp": float(block.timestamps[start]), "kind": "sample_gap"})
+            if self.settle_until is None:
+                self.settle_until = float(block.timestamps[start]) + self.config.settle_seconds
+            filtered[start:stop] = self.filter.apply(block.samples[start:stop])
         self.last_arrival = block.received_at
         self.last_sample = float(block.timestamps[-1])
-        filtered = self.filter.apply(block.samples)
         self.log("processed", {"timestamps": block.timestamps, "samples": filtered,
                                "received_at": block.received_at})
-        self.timestamps = np.concatenate([self.timestamps, block.timestamps])
-        self.raw = np.vstack([self.raw, block.samples])
-        self.processed = np.vstack([self.processed, filtered])
+        tail = starts[-1]
+        self.timestamps = np.concatenate([self.timestamps, block.timestamps[tail:]])
+        self.raw = np.vstack([self.raw, block.samples[tail:]])
+        self.processed = np.vstack([self.processed, filtered[tail:]])
         imu = block.imu if block.imu is not None else np.full((len(block.timestamps), 3), np.nan)
-        self.imu = np.vstack([self.imu, imu])
+        self.imu = np.vstack([self.imu, imu[tail:]])
         keep = self.timestamps > self.last_sample - self.config.window_seconds
         self.timestamps, self.raw, self.processed, self.imu = (
             self.timestamps[keep], self.raw[keep], self.processed[keep], self.imu[keep])
@@ -119,7 +128,7 @@ class Pipeline:
             self.active[kind] = active
         complete = (len(self.timestamps) >= round(fs * self.config.window_seconds) - 1
                     and self.timestamps[0] >= self.settle_until
-                    and np.all(np.diff(self.timestamps) <= 2 / fs))
+                    and np.all(np.diff(self.timestamps) <= 1.5 / fs))
         self.quality = assess(self.raw, self.imu, self.config, complete)
         if self.last_artifact >= self.timestamps[0]:
             self.quality.valid = False

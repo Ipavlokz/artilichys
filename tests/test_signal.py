@@ -93,6 +93,18 @@ def test_filter_state_and_causality_are_independent_of_block_boundaries():
     np.testing.assert_allclose(prefix, whole[:600], atol=1e-12)
 
 
+def test_dc_electrode_offset_does_not_invent_filter_transient_or_bad_quality():
+    t = np.arange(750) / 250
+    clean = np.tile((12 * np.sin(2 * np.pi * 10 * t))[:, None], (1, 8))
+    offset = clean + np.arange(8) * 10000
+    np.testing.assert_allclose(CausalFilter(250, Config()).apply(offset),
+                               CausalFilter(250, Config()).apply(clean), atol=1e-7)
+    assert assess(offset, None, Config()).valid
+    assert not assess(np.full((750, 8), 50000.0), None, Config()).valid
+    offset[100, 0] += 500
+    assert "amplitude:ch1" in assess(offset, None, Config()).reasons
+
+
 def test_quality_flags_flat_missing_and_motion():
     t = np.arange(750) / 250
     raw = np.tile((10 * np.sin(2 * np.pi * 10 * t))[:, None], (1, 8))
@@ -124,6 +136,13 @@ def test_broadband_muscle_spikes_are_not_blink_events(metadata):
     raw = np.tile(muscle[:, None], (1, 8))
     flags = detect(raw, 250, metadata.groups, metadata, Config())
     assert flags["muscle"] and not flags["blink"]
+
+
+def test_mains_alone_does_not_trigger_muscle_detection(metadata):
+    t = np.arange(125) / 250
+    signal = 150 * np.sin(2 * np.pi * 60 * t) + 12 * np.sin(2 * np.pi * 10 * t)
+    raw = np.tile(signal[:, None], (1, 8)) + 40000
+    assert not detect(raw, 250, metadata.groups, metadata, Config())["muscle"]
 
 
 def test_band_power_and_unavailable_anatomical_groups(metadata):
