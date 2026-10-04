@@ -26,6 +26,7 @@ def output_options(parser):
     parser.add_argument("--no-osc", action="store_true")
     parser.add_argument("--speed", type=float, default=1, help="1 = tiempo real, 0 = acelerado; OSC acelerado sólo para pruebas")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--display", choices=["json", "text"], default="json", help="text = estado legible para principiantes")
     parser.add_argument("--markers", help="Marcadores reference/music con timestamps de la fuente")
 
 
@@ -114,8 +115,14 @@ def main(argv=None):
         if args.markers:
             source = MarkedSource(source, args.markers)
         summary = run(source, config, record=record, osc_host=args.osc_host, osc_port=args.osc_port,
-                      osc=not args.no_osc, print_interval=0 if args.quiet else 1)
-        print(json.dumps(summary, ensure_ascii=False, allow_nan=False))
+                      osc=not args.no_osc, print_interval=0 if args.quiet else 1, display=args.display)
+        if args.display == "text":
+            print(f"Finalizado: {summary['output_frames']} actualizaciones; {summary['valid_windows']} ventanas validas; {summary['invalid_windows']} descartadas.")
+            print("Referencia personal: " + ("LISTA" if summary["baseline"]["ready"] else "PENDIENTE; faltaron ventanas validas"))
+            if summary["record"]:
+                print("Sesion guardada en: " + summary["record"])
+        else:
+            print(json.dumps(summary, ensure_ascii=False, allow_nan=False))
         return 0
     except (ValueError, OSError, TypeError, KeyError) as exc:
         parser.error(str(exc))

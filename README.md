@@ -4,6 +4,8 @@ Pipeline EEG ejecutable sin hardware: ocho canales simulados o grabados → regi
 
 **Las bandas son descriptores de señal. No se infieren emociones, valencia ni activación.** El Unicorn, su montaje y la interfaz de Unicorn Suite / Hybrid Black todavía deben confirmarse. Los 250 Hz y los grupos de canales del simulador son elecciones sintéticas, nunca especificaciones del hardware.
 
+**Para empezar sin experiencia en programación:** seguir [GUIA_WINDOWS.md](GUIA_WINDOWS.md). Se incluye una grabación EEG real de OpenBCI, de unos 60 segundos, lista para reproducir sin descargas adicionales. En Windows, `PROBAR_EEG.cmd` prepara el entorno y la ejecuta con doble clic; `ESCUCHAR_OSC.cmd` permite observar la recepción OSC en otra ventana. La procedencia, licencia y conversión están documentadas en [SOURCE.md](examples/recordings/openbci/SOURCE.md).
+
 ## Inicio rápido en Windows
 
 Instalar Python 3.10 o posterior (se recomienda 3.12), Git y ejecutar en PowerShell dentro del repositorio:
@@ -28,6 +30,10 @@ La simulación dura 45 segundos por defecto y muestra un resumen JSON cada segun
 ## Comandos
 
 ```bash
+# Grabación real incluida: ocho canales, 250 Hz, sin posiciones/anotaciones musicales confirmadas
+python -m neurovisual inspect examples/recordings/openbci
+python -m neurovisual replay examples/recordings/openbci --display text --record sessions/real
+
 # Sesión limpia, con cambios graduales conocidos y marcadores sintéticos
 python -m neurovisual run --source simulated --duration 45 --record sessions/clean
 
@@ -55,7 +61,7 @@ python -m neurovisual run --duration 96 --speed 0 --no-osc --quiet --record sess
 python -m neurovisual compare sessions/study --output sessions/study/comparison.json
 ```
 
-Los directorios de salida deben ser nuevos: nunca se sobrescribe una sesión existente. `run` guarda por defecto en `sessions/<fecha>_<id>`; `--no-record` permite una ejecución efímera. `replay` sólo guarda otra sesión cuando se pasa `--record`. `--quiet` oculta el estado periódico, pero conserva el resumen final. `--speed 2` reproduce a doble velocidad; para consumidores visuales usar `--speed 1`. El modo acelerado puede saturar UDP y no conserva la cadencia de pared del OSC.
+Los directorios de salida deben ser nuevos: nunca se sobrescribe una sesión existente. `run` guarda por defecto en `sessions/<fecha>_<id>`; `--no-record` permite una ejecución efímera. `replay` sólo guarda otra sesión cuando se pasa `--record`. `--display text` muestra estado y resumen legibles; el valor predeterminado `json` conserva la salida estructurada. `--quiet` oculta el estado periódico, pero conserva el resumen final. `--speed 2` reproduce a doble velocidad; para consumidores visuales usar `--speed 1`. El modo acelerado puede saturar UDP y no conserva la cadencia de pared del OSC.
 
 El ejemplo CSV tiene un segundo de señal: permite validar/importar, pero no alcanza para calibrar. Una grabación de demostración útil necesita al menos diez segundos limpios iniciales.
 
@@ -106,9 +112,11 @@ Cada adaptador publica `SourceMetadata` y `Block`. El procesamiento sólo consum
 | Suavizado | constante de tiempo 0.5 s |
 | Calidad inválida | retención 1 s, vuelta a espera con constante 2 s |
 
-Los filtros sólo usan pasado y presente, conservan estado entre bloques y se reinician al detectar discontinuidad de muestras o recuperación de conexión. Se exige una ventana íntegra posterior al descarte de arranque. Si el notch está por encima de Nyquist se omite, lo que queda registrado en `metadata.json`; la banda de estudio incompatible con el muestreo produce error. La frecuencia siempre procede de los metadatos de la fuente. Se comprueba además su concordancia con el paso mediano de timestamps (tolerancia 20% por bloque); saltos internos invalidan la ventana.
+Los filtros sólo usan pasado y presente, conservan estado entre bloques y se reinician al detectar discontinuidad de muestras o recuperación de conexión, incluso cuando falta un paquete dentro de un bloque. Un intervalo mayor a 1.5 veces el paso nominal se considera discontinuidad. El estado inicial representa un pasado constante igual a la primera muestra disponible: evita crear un gran transitorio por el desplazamiento DC de electrodos reales. Se exige una ventana íntegra posterior al descarte de arranque. Si el notch está por encima de Nyquist se omite, lo que queda registrado en `metadata.json`; la banda de estudio incompatible con el muestreo produce error. La frecuencia siempre procede de los metadatos de la fuente. Se comprueba además su concordancia con el paso mediano de timestamps (tolerancia 20% por bloque).
 
 Una ventana falla si cualquier canal falta, es plano, supera la amplitud límite, presenta artefacto sospechoso, contiene discontinuidades o tiene movimiento excesivo. La calidad global es una media de indicadores heurísticos; **no es una probabilidad ni sustituye `/neuro/features/valid`**. Por seguridad se requieren los ocho canales válidos; no se reconstruyen canales ni se aplica ICA. Valores faltantes permanecen NaN en la señal procesada y `null` en JSON. Internamente el filtro mantiene el último valor para continuidad numérica durante un faltante; ninguna ventana afectada llega a extracción ni al visual.
+
+El límite de amplitud y la sospecha de parpadeo consideran variaciones alrededor de la mediana de la ventana pasada, no el desplazamiento constante del electrodo. Los crudos no se centran ni alteran. La sospecha muscular excluye ±3 Hz alrededor de la frecuencia de red configurada, tanto de la proporción espectral como de su requisito de amplitud: interferencia de red aislada no se etiqueta como músculo. Esto no sustituye comprobar saturación del ADC o contacto con información del hardware. El archivo real conserva artefactos y tres huecos de paquetes; `inspect` informa también `timestamp_gaps`. En la demostración incluida la calibración llega aproximadamente a los 18 segundos debido a rechazos reales.
 
 Theta: 4–8 Hz; alfa: 8–13 Hz; beta: 13–30 Hz. Welch estima potencia en uV². Alfa posterior sólo existe si se declara el grupo `posterior`; balance lateral usa potencia alfa de los grupos `left` y `right`. Balance espectral: log(alfa/beta). La normalización usa mediana y MAD de referencia, con un intervalo mínimo para evitar dividir por variabilidad casi nula; se congela después de calibrar y limita las salidas a sus rangos. La línea base incluye ventanas solapadas: sirve para calibración artística, no como número de observaciones independientes para inferencia. Se recalibra iniciando una sesión nueva.
 

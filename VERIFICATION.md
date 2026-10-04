@@ -2,6 +2,8 @@
 
 Verificado el 3 de octubre de 2026 (America/Mexico_City), en este workspace Linux. No se conectó un Unicorn. Windows tiene instrucciones y un workflow de CI, pero no se ejecutó manualmente en este entorno.
 
+**Actualización con grabación real:** la suite actual tiene **44 pruebas**, todas correctas. Se añadió una muestra oficial OpenBCI lista para reproducción y una guía para principiantes en Windows. Los resultados iniciales siguientes corresponden a la primera implementación; la verificación de la actualización aparece al final.
+
 ## Instalación y pruebas
 
 - Python 3.12.14.
@@ -62,3 +64,32 @@ Los registros de demostración quedan en `sessions/` de este workspace y se excl
 5. Registrar audio y marcadores reales en bloques repetidos/controlados antes de interpretar cambios como asociados a música.
 
 No se han verificado hardware, LSL/UDP del fabricante, exactitud clínica ni causalidad musical. La fase de software simulada y de reproducción sí es ejecutable y está probada.
+
+## Actualización: grabación real OpenBCI y uso en Windows
+
+Fuente: [muestra oficial OpenBCI GUI](https://github.com/OpenBCI/OpenBCI_GUI/tree/e23869e7b5cc621e733d8fa0d81f05d477264306/OpenBCI_GUI/data/EEG_Sample_Data), archivo original `OpenBCI_GUI-v6-meditation.txt`, bajo la licencia MIT del repositorio. Se incluyó un recorte de 15,000 mediciones, con los ocho canales originales a 250 Hz y acelerómetro. Procedencia, hashes, unidades y transformación temporal en `examples/recordings/openbci/SOURCE.md`.
+
+El recorte ocupa unos 2.2 MB incluyendo el original comprimido. Conserva valores EEG/IMU sin prefiltrar y tres pérdidas de muestras del contador. El reloj relativo deriva del contador y la frecuencia declarada, ya que los timestamps nativos de recepción se repiten; todos los originales permanecen en el recorte comprimido. No se inventan posiciones de electrodos ni anotaciones musicales.
+
+La grabación reveló casos ausentes del simulador inicial. Se corrigieron:
+
+- Calidad de amplitud relativa a la mediana pasada del canal, manteniendo crudos intactos y rechazo de picos/plano.
+- Inicialización causal del filtro con un pasado constante igual a la primera muestra, para evitar un transitorio artificial por grandes offsets de electrodos.
+- Exclusión de la frecuencia de red de la proporción y amplitud empleadas para sospecha muscular.
+- Reinicio del filtro y de la ventana ante un paquete perdido, incluso dentro de un bloque; conservación de todas las muestras crudas y procesadas recibidas.
+- `inspect` ahora informa `timestamp_gaps`; `--display text` muestra estado y resumen legibles.
+
+Comandos verificados:
+
+```bash
+python -m neurovisual inspect examples/recordings/openbci
+python -m neurovisual replay examples/recordings/openbci --speed 0 --no-osc --display text --record sessions/openbci-real-check
+python -m pytest -q
+python -m pip check
+```
+
+Resultados actuales: **44 pruebas pasaron en 11.72 s**, sin dependencias incompatibles, y compilación correcta de módulos y del importador. La grabación produjo 901 frames, 117 ventanas válidas y 183 descartadas; referencia lista y primer frame válido alrededor de 18.33 s. `inspect` confirmó 15,000 muestras, tres huecos de timestamps y ningún valor individual faltante.
+
+Se reprodujeron además los 60 segundos en tiempo real con un receptor UDP separado: **901 bundles OSC**, 32 direcciones, 275 frames con características válidas y 16 pulsos de sospecha muscular. Los registros crudos, procesados y de características resultaron idénticos byte a byte entre la reproducción rápida y la real. Las sospechas de artefacto no se han contrastado contra anotaciones expertas.
+
+Los accesos `PROBAR_EEG.cmd` y `ESCUCHAR_OSC.cmd`, y `GUIA_WINDOWS.md`, se prepararon para Windows. La lógica Python está probada en Linux; los archivos de comandos Windows se revisaron, pero no se ejecutaron en una máquina Windows desde este entorno. El Unicorn y el experimento musical siguen pendientes de verificación.

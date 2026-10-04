@@ -74,3 +74,10 @@ def test_cli_simulation_inspect_and_replay(tmp_path, capsys):
 def test_example_csv_is_valid():
     result = inspect_source(ReplaySource("examples/sample.csv", speed=0, metadata_path="examples/sample.metadata.json"))
     assert result["samples"] == 100
+
+
+def test_cli_readable_output_does_not_require_reading_json(tmp_path, capsys):
+    assert main(["run", "--duration", "0.3", "--speed", "0", "--no-osc", "--no-record", "--display", "text"]) == 0
+    output = capsys.readouterr().out
+    assert "calibracion=PENDIENTE" in output and "Finalizado:" in output
+    assert "Referencia personal:" in output
