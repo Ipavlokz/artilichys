@@ -144,6 +144,32 @@ Puedes abrirlos con Bloc de notas para comprobar que existen; no necesitas enten
 .venv\Scripts\python.exe -m neurovisual replay sessions/mi-primera-prueba --display text
 ```
 
+## Ver una imagen y comparar dos reglas artísticas
+
+Después de preparar el programa, haz doble clic en **`VER_VISUAL.cmd`**. Procesará dos veces la grabación real OpenBCI incluida y abrirá una página en tu navegador. No necesitas Internet para ver esa página ni conectar el Unicorn.
+
+Verás dos paneles: **original** y **alternativa**. Ambos usan exactamente las mismas mediciones. El primero usa alfa para color y theta para flujo; el segundo intercambia esas entradas y usa balance espectral para la organización del dibujo. Esa comparación muestra el efecto de elegir otras reglas; no demuestra cuál es científicamente mejor.
+
+1. Pulsa **Reproducir** para recorrer los 60 segundos de grabación.
+2. Pulsa **Primera ventana válida** para ver directamente un momento con controles disponibles. El inicio requiere calibración y en esta grabación hay ventanas rechazadas.
+3. Mueve la barra de tiempo para examinar un momento concreto en ambos paneles. Cerca de los 50 segundos suele apreciarse bien la diferencia entre reglas.
+4. Revisa los números debajo de cada imagen: color, intensidad, flujo y organización. También aparecen calidad, movimiento, canales y posibles artefactos.
+5. Abre **Ver reglas y nombres OSC** para comprobar qué entrada mueve cada control.
+
+El dibujo cambia de tono con color, de tamaño/brillo con intensidad, de movimiento con flujo y de distribución con organización. Un pulso dibuja un contorno breve. Son formas de representar números; el dibujo no mide emociones ni coherencia cerebral.
+
+La página usa resultados **guardados**, no una señal en vivo. Los controles se reproducen tal como quedaron registrados, incluso durante retención y retorno a espera. La etiqueta `referencia` de OpenBCI sirve para calibración técnica; ese archivo no tiene anotaciones de música.
+
+El programa muestra dónde guardó `viewer.html`, dentro de una carpeta nueva `sessions/ensayo-visual-...`. Puedes volver a abrirlo con doble clic. Si el navegador no se abre automáticamente, busca ese archivo y ábrelo tú.
+
+Para ver una sesión que tú guardaste, por ejemplo la del ensayo manual:
+
+```powershell
+.venv\Scripts\python.exe -m neurovisual view sessions/ensayo-manual --open
+```
+
+Si indica que falta `controls.jsonl`, elegiste una grabación cruda que todavía necesita procesarse con `replay --record`. La guía anterior explica cómo guardar el resultado. El visor sólo crea o actualiza un archivo HTML; conserva tus mediciones y resultados.
+
 ## Cambiar qué mueve el color y cómo se llama el mensaje
 
 Ahora puedes hacerlo sin programar. Ya viene una alternativa preparada en `examples/visual-custom.json`. Abre el receptor OSC como en el paso 6 y, en la otra terminal, escribe:

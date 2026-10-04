@@ -1,6 +1,6 @@
 # Neurovisual — fase 1
 
-Pipeline EEG ejecutable sin hardware: ocho canales simulados o grabados → registro crudo → calidad y artefactos → filtros causales → descriptores espectrales → línea base personal → controles → OSC UDP. No reproduce música ni dibuja el visual definitivo. Los consumidores reciben el mismo contrato al cambiar de fuente.
+Pipeline EEG ejecutable sin hardware: ocho canales simulados o grabados → registro crudo → calidad y artefactos → filtros causales → descriptores espectrales → línea base personal → controles → OSC UDP. Incluye un visor local para ensayar sesiones guardadas. La conexión del Unicorn y el visual definitivo siguen pendientes. Los consumidores reciben el mismo contrato al cambiar de fuente.
 
 **Las bandas son descriptores de señal. No se infieren emociones, valencia ni activación.** El Unicorn, su montaje y la interfaz de Unicorn Suite / Hybrid Black todavía deben confirmarse. Los 250 Hz y los grupos de canales del simulador son elecciones sintéticas, nunca especificaciones del hardware.
 
@@ -49,6 +49,9 @@ python -m neurovisual inspect sessions/faults
 # Reprocesar los crudos usando la configuración guardada y el ritmo original
 python -m neurovisual replay sessions/faults --record sessions/reprocessed
 
+# Ver controles registrados en el navegador, sin servidor ni Internet
+python -m neurovisual view sessions/reprocessed --open
+
 # Importar CSV con columnas explícitas
 python -m neurovisual inspect examples/sample.csv --metadata examples/sample.metadata.json --columns examples/columns.json
 python -m neurovisual replay examples/sample.csv --metadata examples/sample.metadata.json
@@ -88,7 +91,9 @@ neurovisual/
   pipeline.py           coordinación; registro antes de validar/procesar
   runner.py             actualización OSC independiente de nuevas muestras
   analysis.py           comparación descriptiva de condiciones
-  cli.py                run / replay / inspect / compare / mark / listen
+  viewer.py             exportación de controles a un HTML local de ensayo
+  templates/viewer.html reproducción y representación simple de controles
+  cli.py                run / replay / inspect / compare / mark / listen / view
 tests/                  pruebas de señal, fallos, reproducción, CLI y UDP real
 examples/               configuración, CSV, metadatos, columnas y marcadores
 .github/workflows/      pruebas en Linux y Windows
@@ -182,6 +187,35 @@ Los pesos se normalizan por su suma; deben ser finitos, no negativos y sumar má
 Las direcciones OSC deben comenzar con `/`, ser únicas y usar letras ASCII, números, `/`, `_`, `-` o `.`; no se permiten espacios ni patrones. `/neuro` está reservado para estado y características EEG. Los errores de configuración se explican antes de crear la sesión. El receptor visual debe escuchar los nombres configurados. `color` sigue siendo un número 0–1: convertirlo a un tono o a RGB corresponde al consumidor artístico. La escena sigue en 0 y el pulso sigue derivando de un parpadeo sospechoso.
 
 Las reglas y los nombres se guardan en `metadata.json`. Replay los recupera automáticamente. `--config` aplica únicamente los campos indicados sobre la configuración guardada: los filtros y reglas no mencionados se conservan. Para volver a todas las reglas y direcciones iniciales, especificar ambos mapas de `examples/config.json`; ese archivo también restablece los parámetros de procesamiento iniciales.
+
+## Ver y comparar reglas artísticas en el navegador
+
+En Windows, después de preparar el programa, hacer doble clic en **`VER_VISUAL.cmd`**. Reprocesa la grabación OpenBCI incluida con las reglas iniciales y con `examples/visual-custom.json`, y abre un HTML con dos imágenes lado a lado. La preparación usa ejecución acelerada y no envía OSC; la reproducción visual posterior puede verse a velocidad normal. Los resultados quedan en un directorio nuevo dentro de `sessions`.
+
+El visor dispone de reproducir/pausar, volver al inicio, una barra de tiempo, velocidad y un botón para saltar a la primera ventana válida. Color cambia el tono, intensidad cambia tamaño/brillo, flujo mueve las partículas y organización distribuye las partículas entre una nube y un anillo. El pulso dibuja un contorno breve. Son elecciones de ensayo; no representan emociones ni coherencia EEG.
+
+Para una sesión propia:
+
+```bash
+python -m neurovisual view sessions/clean --open
+# También puede pasarse sessions/clean/controls.jsonl
+```
+
+Se crea o actualiza `viewer.html` dentro de la sesión. `--output archivo.html` elige otro destino. El HTML contiene los controles, características normalizadas y estados registrados; no depende de un servidor, Internet, Node ni bibliotecas JavaScript externas. Se puede abrir de nuevo con doble clic. Los registros EEG y la configuración se conservan intactos.
+
+Para comparar reglas con los mismos datos:
+
+```bash
+python -m neurovisual replay examples/recordings/openbci --speed 0 --no-osc --quiet --record sessions/visual-original
+python -m neurovisual replay examples/recordings/openbci --config examples/visual-custom.json --speed 0 --no-osc --quiet --record sessions/visual-alternativa
+python -m neurovisual view sessions/visual-original --compare sessions/visual-alternativa --output sessions/comparacion-visual.html --open
+```
+
+La comparación exige el mismo muestreo/orden/grupos de canales y archivos `raw.jsonl` y `features.jsonl` idénticos. Así sólo se comparan decisiones artísticas sobre las mismas mediciones y características. Las sesiones se recorren en su intervalo temporal compartido; para cada instante se muestra la última actualización registrada, sin volver a calcular ni interpolar sus valores. Si los ticks de dos sesiones difieren, se muestra el timestamp efectivo de cada panel. Para una comparación uniforme, generar ambas con `--speed 0` como arriba.
+
+Los estados de calidad, calibración, conexión y movimiento aparecen junto a la imagen. Las ventanas inválidas atenúan los indicadores EEG; la imagen conserva los controles ya calculados por Python, incluida la retención y vuelta a espera. Una entrada anatómica no disponible aparece como `espera`. La etiqueta de condición refleja lo registrado: en OpenBCI, `reference` sólo corresponde a calibración técnica y no prueba que la grabación se hiciera sin música.
+
+Este visor reproduce resultados guardados. Recibir OSC en un visual en vivo sigue siendo una integración posterior. La comprobación opcional del navegador está en `scripts/check_viewer.cjs`; necesita Node, Playwright y Chromium únicamente para desarrollo. Las pruebas normales y el usuario del visor no requieren esas herramientas.
 
 ## Grabaciones e importación
 

@@ -2,7 +2,7 @@
 
 Verificado el 3 de octubre de 2026 (America/Mexico_City), en este workspace Linux. No se conectó un Unicorn. Windows tiene instrucciones y un workflow de CI, pero no se ejecutó manualmente en este entorno.
 
-**Estado actual:** la suite tiene **82 pruebas**, todas correctas. Incluye una muestra oficial OpenBCI lista para reproducción, guía para principiantes en Windows, configuración de reglas visuales/nombres OSC y anotaciones manuales de música/referencia. Los resultados iniciales siguientes corresponden a la primera implementación; las verificaciones de las actualizaciones aparecen al final.
+**Estado actual:** la suite tiene **95 pruebas**, todas correctas. Incluye una muestra oficial OpenBCI lista para reproducción, guía para principiantes en Windows, configuración de reglas visuales/nombres OSC, anotaciones manuales de música/referencia y un visor local de sesiones. Los resultados iniciales siguientes corresponden a la primera implementación; las verificaciones de las actualizaciones aparecen al final.
 
 ## Instalación y pruebas
 
@@ -143,3 +143,31 @@ python -m neurovisual replay sessions/manual-markers-realtime --speed 0 --no-osc
 El ensayo ejecutado usó un puerto local libre pasado en `--marker-port` y `mark --port`; los comandos anteriores muestran el puerto inicial 9001. `raw.jsonl`, `processed.jsonl`, `quality.jsonl`, `features.jsonl`, `events.jsonl` y `baseline.json` resultaron idénticos byte a byte al reproducirlo. `compare` seleccionó cuatro ventanas de referencia y una de música: mostró correctamente evidencia insuficiente en los 24 resultados, ya que el ensayo breve verifica transporte y registro y no alcanza el mínimo de cinco por condición. Los controles en tiempo real y replay pueden tener distinta fase de ticks OSC; la cronología de las mediciones y marcas se conserva.
 
 Se prepararon `ENSAYAR_MARCADORES.cmd` y `MARCAR_MUSICA.cmd`, con instrucciones en GUIA_WINDOWS. Los accesos Windows se revisaron, pero no se ejecutaron en Windows desde este entorno. Las anotaciones son manuales y no verifican el audio ni su inicio acústico; el retraso del operador y del comando sigue pendiente de una sincronización automática. El Unicorn físico y un experimento musical humano continúan pendientes.
+
+## Actualización: visor local de controles y comparación de reglas
+
+Se añadió `view`, que exporta los controles guardados a un HTML autocontenido. Muestra partículas controladas por color, intensidad, flujo y organización, un contorno por pulso y los valores/estados originales. Dispone de reproducir/pausar, buscar por tiempo, volver al inicio, elegir velocidad y saltar a la primera ventana válida. No recalcula características ni altera la política de retención/espera de Python. La disponibilidad de movimiento y de entradas anatómicas se muestra explícitamente.
+
+`--compare` requiere crudos y características idénticos y el mismo muestreo y orden/grupos de canales. Se verifican antes de exportar: dos reglas se evalúan sobre la misma señal y características. Se conserva el timestamp efectivo de cada panel al recorrer su intervalo compartido. La fuente queda identificada como simulación o grabación; los nombres y demás textos se insertan como texto, y el JSON incrustado escapa caracteres que podrían cerrar el elemento script.
+
+Verificaciones realizadas:
+
+- Suite Python: **95 pruebas correctas en 25.81 s** en la última ejecución. Se añadieron 13 comprobaciones de conservación de valores/timestamps/archivos, ventanas inválidas y pulsos, comparación de entradas iguales, rechazo de señales/características diferentes, esquemas corruptos, texto incrustado y protección de archivos de registro.
+- Chromium con Playwright: dos paneles, búsqueda por tiempo, primera ventana válida, reproducción, pausa y reinicio; controles del DOM idénticos al registro. Se verificaron ventanas válidas, parpadeo, desconexión, datos detenidos y recuperación. **Cero errores JavaScript y cero solicitudes a recursos externos.**
+- El navegador administrado de este entorno bloqueó la navegación `file://` con `ERR_BLOCKED_BY_ADMINISTRATOR`. La verificación cargó el HTML completo como contenido de una página nueva de prueba, sin alterar esa política. No se verificó la apertura directa del archivo en Windows desde aquí.
+- Creación de un wheel sin instalar dependencias adicionales: correcta. La plantilla HTML está incluida y se verificó la exportación importando el paquete directamente desde el wheel.
+- `pip check`, compilación de módulos y `git diff --check`: correctos. No se añadieron dependencias de ejecución. Node/Playwright sólo se utilizan en la comprobación opcional del navegador.
+
+Se generaron sesiones de la misma grabación OpenBCI con configuración inicial y con `examples/visual-custom.json`: 901 actualizaciones y 276 frames con características válidas por panel, con 117 ventanas EEG válidas y 183 descartadas. El HTML comparativo ocupa aproximadamente 1.26 MB. La diferencia entre ventanas EEG y frames válidos responde a las cadencias de características y controles; los totales de frames pueden variar ligeramente con la fase de publicación respecto a cambios de calidad.
+
+```bash
+python -m neurovisual replay examples/recordings/openbci --speed 0 --no-osc --quiet --record sessions/viewer-today/original
+python -m neurovisual replay examples/recordings/openbci --config examples/visual-custom.json --speed 0 --no-osc --quiet --record sessions/viewer-today/alternativa
+python -m neurovisual view sessions/viewer-today/original --compare sessions/viewer-today/alternativa --output sessions/viewer-today/viewer.html
+python -m neurovisual view sessions/faults-final
+node scripts/check_viewer.cjs sessions/viewer-today/viewer.html sessions/faults-final/viewer.html sessions/viewer-today/comparison.png
+```
+
+El último comando requiere Node, Playwright y Chromium; `NEUROVISUAL_BROWSER` permite indicar otro ejecutable Chromium. El usuario del visor sólo necesita su navegador. `VER_VISUAL.cmd` prepara la comparación y solicita abrir el HTML en Windows; su lógica se revisó y sus comandos Python se ejecutaron, pero el archivo `.cmd` no se ejecutó en Windows. Se documentó en README y GUIA_WINDOWS.
+
+El visor es una herramienta de ensayo de resultados guardados. Sigue pendiente recibir OSC en un visual en vivo, conectar el Unicorn y evaluar las reglas con un experimento musical real. La forma del dibujo no representa coherencia EEG ni emociones.

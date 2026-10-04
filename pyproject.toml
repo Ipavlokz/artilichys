@@ -19,5 +19,8 @@ neurovisual = "neurovisual.cli:main"
 [tool.setuptools.packages.find]
 include = ["neurovisual*"]
 
+[tool.setuptools.package-data]
+neurovisual = ["templates/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

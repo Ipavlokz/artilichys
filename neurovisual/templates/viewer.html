@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neurovisual · Ensayo de sesión</title>
+<style>
+  :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0a101c;color:#e5edf5}
+  *{box-sizing:border-box} body{margin:0;padding:28px;max-width:1440px;margin-inline:auto}
+  h1{font-size:clamp(24px,4vw,40px);margin:8px 0} p{line-height:1.5;color:#a9bbcd}
+  .eyebrow{color:#8bf0cf;font-size:12px;letter-spacing:.16em;text-transform:uppercase}
+  .player{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#142034;border:1px solid #2a3c54;border-radius:14px;padding:16px;margin:22px 0}
+  button,select{font:inherit;background:#243a50;color:#fff;border:1px solid #496780;border-radius:8px;padding:9px 13px;cursor:pointer}
+  button:disabled{opacity:.4;cursor:default} button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #8bf0cf;outline-offset:3px}
+  #timeline{flex:1;min-width:170px;accent-color:#8bf0cf} #clock{font-variant-numeric:tabular-nums;min-width:125px}
+  .tracks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,450px),1fr));gap:20px}
+  .track{background:#111c2b;border:1px solid #2a3c54;border-radius:18px;overflow:hidden}
+  .heading,.details{padding:18px} h2{margin:0 0 6px;font-size:22px}.source{margin:0;font-size:13px;overflow-wrap:anywhere}
+  svg.art{display:block;width:100%;background:#070e1c;aspect-ratio:3/2}
+  .badge{display:inline-block;border-radius:999px;padding:5px 10px;background:#344252;font-size:13px;margin:12px 6px 0 0}
+  .valid .quality{background:#154d40;color:#a3ffdc}.invalid .quality{background:#583c2b;color:#ffd29b}
+  .statusline{margin:0 0 10px;font-size:13px;min-height:2.8em;overflow-wrap:anywhere}
+  table{width:100%;border-collapse:collapse;font-size:13px} th,td{text-align:left;padding:7px 2px;border-bottom:1px solid #26394e} td.value{text-align:right;font-variant-numeric:tabular-nums}
+  .sectionlabel{font-size:12px;color:#93a9bf;text-transform:uppercase;letter-spacing:.08em;margin:18px 0 5px}
+  .bandrow{display:grid;grid-template-columns:55px 1fr 40px;align-items:center;gap:10px;margin:8px 0;font-size:13px}
+  progress{width:100%;height:8px;accent-color:#8bf0cf}.invalid .bands{opacity:.45}
+  .hint,.rules,.events{font-size:12px;line-height:1.5;color:#a9bbcd;overflow-wrap:anywhere}
+  .rules{margin-top:14px}.rules summary{cursor:pointer;color:#c3d7e8}.rules ul{padding-left:20px}
+  .channels{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.channel{font-size:11px;background:#213248;padding:4px 6px;border-radius:5px}
+  footer{margin-top:20px;font-size:13px;color:#93a9bf}.pulse{fill:none;stroke:#e2fbff;stroke-width:3}
+  @media(max-width:600px){body{padding:14px}.player{gap:9px}.heading,.details{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Neurovisual · Herramienta de ensayo</div>
+  <h1 id="title">Ver una sesión guardada</h1>
+  <p>Reproducción de controles artísticos registrados. Color, brillo, movimiento y organización son elecciones visuales; las bandas EEG son descriptores de señal.</p>
+</header>
+<div class="player" aria-label="Reproducción de sesión">
+  <button id="play" type="button">Reproducir</button>
+  <button id="restart" type="button">Volver al inicio</button>
+  <button id="first-valid" type="button">Primera ventana válida</button>
+  <input id="timeline" type="range" min="0" step="0.001" value="0" aria-label="Tiempo de la sesión">
+  <span id="clock" aria-live="off"></span>
+  <label for="speed">Velocidad</label>
+  <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+</div>
+<main id="tracks" class="tracks"></main>
+<footer>Los controles mostrados conservan la retención y vuelta a espera calculadas en Python. Cuando una ventana es inválida, los valores EEG pueden estar retenidos: consulta el estado. La organización del dibujo no mide coherencia EEG. Este ensayo no detecta emociones ni demuestra un efecto de la música.</footer>
+<noscript>Activa JavaScript en el navegador para reproducir este archivo local.</noscript>
+<script id="session-data" type="application/json">__SESSION_DATA__</script>
+<script>
+"use strict";
+const data=JSON.parse(document.getElementById("session-data").textContent);
+const duration=data.end-data.start;
+const timeline=document.getElementById("timeline"), play=document.getElementById("play");
+timeline.max=String(duration);
+document.getElementById("title").textContent=data.tracks.length===2?"Una señal, dos reglas artísticas":"Ver una sesión guardada";
+let cursor=0, playing=false, previousWall=null;
+const labels={color:"Color",intensity:"Intensidad",flow:"Flujo",coherence:"Organización",pulse:"Pulso",scene:"Escena"};
+const svgNS="http://www.w3.org/2000/svg";
+function element(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
+function svgElement(tag,attrs){const node=document.createElementNS(svgNS,tag);for(const [k,v]of Object.entries(attrs))node.setAttribute(k,String(v));return node;}
+function formatRule(rule){if(typeof rule==="string")return rule;const total=Object.values(rule.weights).reduce((sum,weight)=>sum+weight,0);return Object.entries(rule.weights).map(([name,weight])=>`${(weight/total*100).toFixed(1)}% ${name}`).join(" + ")+(rule.invert?" (invertido)":"");}
+function stateLabel(status){if(!status.connected)return "Sin conexión registrada";if(status.stale)return "Datos detenidos";if(!status.calibrated)return "Referencia pendiente";if(!status.valid)return "Ventana descartada";return "Ventana válida";}
+function locate(frames,time){let low=0,high=frames.length-1;while(low<high){const middle=Math.ceil((low+high)/2);if(frames[middle].timestamp<=time)low=middle;else high=middle-1;}return low;}
+const views=data.tracks.map(track=>{
+  const card=element("section","track");
+  const heading=element("div","heading");heading.append(element("h2",null,track.name),element("p","source",`${track.source==="simulated"?"EEG SIMULADO":`EEG grabado · ${track.source}`} · ${track.sample_rate} Hz · ${track.channels.length} canales`));
+  const quality=element("span","badge quality"),condition=element("span","badge");heading.append(quality,condition);card.append(heading);
+  const art=svgElement("svg",{class:"art",viewBox:"0 0 600 400",role:"img","aria-label":"Representación de los controles artísticos guardados"});
+  const glow=svgElement("circle",{cx:300,cy:200,r:100});art.append(glow);
+  const points=Array.from({length:80},(_,i)=>{const circle=svgElement("circle",{r:3});art.append(circle);return {circle,x:35+((i*173)%530),y:30+((i*97)%340),angle:i*Math.PI*2/80};});
+  const pulse=svgElement("circle",{class:"pulse",cx:300,cy:200,r:170,opacity:0});art.append(pulse);card.append(art);
+  const details=element("div","details"),statusline=element("p","statusline");details.append(statusline,element("p","sectionlabel","Controles registrados"));
+  const table=element("table");const head=element("tr");head.append(element("th",null,"Control"),element("th",null,"Valor"));table.append(head);
+  const outputs={};for(const key of Object.keys(labels)){const row=element("tr"),label=element("td",null,labels[key]),value=element("td","value");row.append(label,value);table.append(row);outputs[key]={row,value};}details.append(table);
+  details.append(element("p","sectionlabel","EEG normalizado"));const bands=element("div","bands"),bandOutputs={};
+  for(const key of ["theta","alpha","beta"]){const row=element("div","bandrow"),bar=document.createElement("progress"),value=element("span");bar.max=1;bar.setAttribute("aria-label",key);row.append(element("span",null,key),bar,value);bands.append(row);bandOutputs[key]={bar,value};}details.append(bands);
+  const hint=element("p","hint");details.append(hint);
+  const channels=element("div","channels"),channelOutputs=track.channels.map(name=>{const node=element("span","channel");channels.append(node);return {node,name};});details.append(channels);
+  const events=element("p","events");details.append(events);
+  const rules=element("details","rules"),list=element("ul");rules.append(element("summary",null,"Ver reglas y nombres OSC"));
+  for(const key of ["color","intensity","flow","coherence"]){list.append(element("li",null,`${labels[key]} ← ${formatRule(track.mapping[key])} · ${track.addresses[key]}`));}rules.append(list,element("p",null,`${track.summary.valid_frames} de ${track.summary.frames} actualizaciones con características válidas. Los pesos forman una mezcla artística, no una medida de energía cerebral.`));details.append(rules);card.append(details);document.getElementById("tracks").append(card);
+  const phases=[0];for(let i=1;i<track.frames.length;i++)phases.push(phases[i-1]+(track.frames[i].timestamp-track.frames[i-1].timestamp)*track.frames[i-1].visual.flow);
+  return {track,card,art,glow,points,pulse,quality,condition,statusline,outputs,bandOutputs,hint,channelOutputs,events,phases};
+});
+function render(){
+  const time=data.start+cursor;
+  timeline.value=String(cursor);document.getElementById("clock").textContent=`${cursor.toFixed(1)} / ${duration.toFixed(1)} s`;
+  for(const view of views){
+    const index=locate(view.track.frames,time),frame=view.track.frames[index],v=frame.visual,s=frame.status;
+    view.card.className=`track ${s.valid?"valid":"invalid"}`;view.card.dataset.frame=String(index);view.card.dataset.timestamp=String(frame.timestamp);
+    view.quality.textContent=`${stateLabel(s)} · calidad ${s.global_score.toFixed(2)}`;
+    view.condition.textContent=s.condition==="music"?"Condición: música":s.condition==="reference"?"Condición: referencia":"Sin anotación";
+    view.statusline.textContent=`Estado registrado a ${(frame.timestamp-data.start).toFixed(2)} s · movimiento ${s.motion_available?s.motion.toFixed(2):"no disponible"} · motivos: ${s.reasons.join(", ")||"ninguno"}`;
+    for(const [key,out]of Object.entries(view.outputs)){out.value.textContent=key==="scene"||key==="pulse"?String(v[key]):v[key].toFixed(3);out.value.dataset.value=String(v[key]);out.row.title=view.track.addresses[key];if(key in s.visual_available&&!s.visual_available[key])out.value.textContent+=" · espera";}
+    for(const [key,out]of Object.entries(view.bandOutputs)){out.bar.value=frame.features[key];out.value.textContent=frame.features[key].toFixed(2);}
+    view.hint.textContent=s.valid?"Características válidas respecto a la referencia de esta sesión.":"Características retenidas o pendientes. La imagen usa los controles guardados, incluida su vuelta a espera.";
+    for(let i=0;i<view.channelOutputs.length;i++){const {node,name}=view.channelOutputs[i];node.textContent=`${name}: ${s.channels[i].toFixed(2)}`;}
+    const active=Object.entries(frame.events).filter(([,value])=>value).map(([name])=>({blink:"parpadeo sospechoso",muscle:"músculo sospechoso",reconnect:"reconexión"})[name]);view.events.textContent=`Eventos: ${active.join(", ")||"ninguno en esta actualización"}`;
+    const hue=20+v.color*280,phase=view.phases[index]+Math.max(0,time-frame.timestamp)*v.flow;
+    const fill=`hsl(${hue.toFixed(2)} 78% ${(30+v.intensity*42).toFixed(2)}%)`;
+    view.glow.setAttribute("fill",fill);view.glow.setAttribute("r",String(60+v.intensity*90));view.glow.setAttribute("opacity",String(0.04+v.intensity*0.14));
+    for(const point of view.points){const angle=point.angle+phase*0.65,radius=100+v.intensity*60+18*Math.sin(point.angle*4+phase);const ringX=300+Math.cos(angle)*radius,ringY=200+Math.sin(angle)*radius;const scatterX=point.x+12*Math.sin(phase+point.angle),scatterY=point.y+12*Math.cos(phase+point.angle);point.circle.setAttribute("cx",String(scatterX*(1-v.coherence)+ringX*v.coherence));point.circle.setAttribute("cy",String(scatterY*(1-v.coherence)+ringY*v.coherence));point.circle.setAttribute("r",String(1.6+v.intensity*3.5));point.circle.setAttribute("fill",fill);}
+    view.pulse.setAttribute("opacity",String(v.pulse));view.pulse.setAttribute("r",String(160+v.intensity*35));
+  }
+}
+function setPlaying(value){playing=value;previousWall=null;play.textContent=playing?"Pausar":"Reproducir";}
+play.disabled=duration<=0;
+const firstValid=data.tracks[0].frames.find(frame=>frame.timestamp>=data.start&&frame.timestamp<=data.end&&data.tracks.every(track=>track.frames[locate(track.frames,frame.timestamp)].status.valid));
+document.getElementById("first-valid").disabled=!firstValid;
+document.getElementById("first-valid").addEventListener("click",()=>{cursor=firstValid.timestamp-data.start;setPlaying(false);render();});
+play.addEventListener("click",()=>{if(cursor>=duration)cursor=0;setPlaying(!playing);render();});
+document.getElementById("restart").addEventListener("click",()=>{cursor=0;setPlaying(false);render();});
+timeline.addEventListener("input",()=>{cursor=Number(timeline.value);previousWall=null;render();});
+document.getElementById("speed").addEventListener("change",()=>{previousWall=null;});
+function animate(wall){if(playing){if(previousWall!==null)cursor=Math.min(duration,cursor+(wall-previousWall)/1000*Number(document.getElementById("speed").value));previousWall=wall;if(cursor>=duration)setPlaying(false);render();}requestAnimationFrame(animate);}
+render();requestAnimationFrame(animate);
+</script>
+</body>
+</html>

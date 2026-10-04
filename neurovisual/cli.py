@@ -63,6 +63,11 @@ def parser_for_cli():
     mark.add_argument("condition", choices=["music", "reference"])
     mark.add_argument("--port", type=int, default=9001)
     mark.add_argument("--label", default="", help="Canción u observación opcional")
+    view = commands.add_parser("view", help="Crear un visor HTML local de controles de una sesión guardada")
+    view.add_argument("path", help="Directorio procesado o controls.jsonl")
+    view.add_argument("--compare", help="Segunda sesión con los mismos crudos/características y otra regla artística")
+    view.add_argument("--output", help="Archivo HTML; por defecto <sesión>/viewer.html")
+    view.add_argument("--open", action="store_true", help="Abrir el HTML en el navegador predeterminado")
     listen = commands.add_parser("listen", help="Receptor OSC local para comprobar el contrato")
     listen.add_argument("--host", default="127.0.0.1")
     listen.add_argument("--port", type=int, default=9000)
@@ -74,6 +79,15 @@ def main(argv=None):
     parser = parser_for_cli()
     args = parser.parse_args(argv)
     try:
+        if args.command == "view":
+            from .viewer import write_viewer
+            target = write_viewer(args.path, args.output, args.compare)
+            print(f"Visor guardado en: {target}")
+            if args.open:
+                import webbrowser
+                if not webbrowser.open(target.resolve().as_uri()):
+                    print("Abrir el archivo HTML con doble clic para ver la sesión.")
+            return 0
         if args.command == "mark":
             response = send_marker(args.condition, args.port, args.label)
             print(f"Marcador recibido: {response['condition']} | tiempo de fuente={response['timestamp']:.3f} s | {response['label']}")
