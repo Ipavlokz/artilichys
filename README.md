@@ -344,3 +344,40 @@ Pendiente con hardware: calidad de contacto real, impedancias si existen, unidad
 4. Implementar el adaptador sobre `Source` con timeout y registrar los crudos. Validar esquema con `inspect`; verificar canales y unidades con señal/maniobras conocidas.
 5. Obtener al menos diez segundos iniciales limpios de referencia y ajustar umbrales de calidad con datos reales. Confirmar OSC en el consumidor artístico.
 6. Registrar periodos reales de música/referencia, repetir bloques controlados y ejecutar `compare`. Conservar crudos y anotaciones para revisar conclusiones.
+
+### Unicorn real: API oficial de Windows
+
+En Windows, actualizar el repositorio y ejecutar **CONECTAR_UNICORN.cmd**.
+El lanzador descarga el SDK desde el repositorio oficial
+[unicorn-bi/Unicorn-Hybrid-Black-Windows-APIs](https://github.com/unicorn-bi/Unicorn-Hybrid-Black-Windows-APIs),
+revision fijada `3be31e8314926bed782a137c95c9003df259639d`, dentro de `vendor/` (ignorado por Git).
+No depende del ZIP que hayas descargado previamente. Requiere que `PROBAR_EEG.cmd`
+haya preparado el entorno Python, Bluetooth emparejado y **licencia Python API**
+activada en Unicorn Suite → Licenses. Cerrar otras adquisiciones que ocupen el dispositivo.
+En TouchDesigner crear OSC In CHOP, puerto 9000, Active On; cerrar ESCUCHAR_OSC.cmd.
+
+```powershell
+.\.venv\Scripts\python.exe -m neurovisual run --source unicorn --sdk-path "vendor\unicorn\python-api\Lib" --display text
+```
+
+Con varios dispositivos, agregar `--device SERIAL`; `--duration 60` limita la sesión.
+Se guardan los datos en `sessions/` y se emiten los mismos controles OSC del simulador.
+La tasa, los nombres, las unidades y los índices se consultan al SDK: no se presupone
+el orden de columnas ni una frecuencia silenciosa. Las unidades desconocidas se rechazan.
+Los timestamps se reconstruyen del contador de muestras, anclado a la recepción monotónica
+local; no equivalen a timestamps absolutos del dispositivo ni al inicio acústico de la música.
+Los saltos del contador conservan huecos temporales. Un contador repetido, reiniciado o
+una excepción detiene la adquisición y comunica desconexión; **reiniciar el programa para
+reconectar**. No hay reconexión automática de este adaptador inicial.
+
+La lectura nativa corre en un hilo para que el consumidor pueda retornar por timeout.
+Si una DLL retiene el GIL o queda bloqueada indefinidamente, esa garantía depende del SDK:
+verificar desconexión física en Windows; el cierre espera un segundo y no llama StopAcquisition
+concurrentemente con GetData. IMU y posiciones anatómicas no se usan todavía en este adaptador;
+posterior/lateral quedan indisponibles hasta confirmar el montaje. No se interpreta el campo
+Validation Indicator sin comprobar su semántica en el hardware.
+
+**Verificado aquí:** interfaz contra un SDK de prueba, orden de canales, conversión mV→uV,
+contador con pérdida de muestras y notificación de pérdida de conexión. **Pendiente:** carga
+real de DLL/licencia, ejecución del lanzador en Windows, adquisición Bluetooth y respuesta
+ante desconexión con el Unicorn conectado. No se afirma validación con hardware.

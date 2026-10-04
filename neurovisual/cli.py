@@ -42,7 +42,9 @@ def parser_for_cli():
     parser = argparse.ArgumentParser(description="EEG: calidad, descriptores y controles artísticos OSC")
     commands = parser.add_subparsers(dest="command", required=True)
     simulate = commands.add_parser("run", help="Ejecutar simulador completo")
-    simulate.add_argument("--source", choices=["simulated"], default="simulated")
+    simulate.add_argument("--source", choices=["simulated", "unicorn"], default="simulated")
+    simulate.add_argument("--sdk-path", help="Carpeta Lib del SDK oficial UnicornPy")
+    simulate.add_argument("--device", help="Serial del Unicorn si hay varios dispositivos")
     simulate.add_argument("--duration", type=float)
     simulate.add_argument("--sample-rate", type=float, help="Frecuencia explícita del simulador; no especificación del Unicorn")
     simulate.add_argument("--seed", type=int)
@@ -129,7 +131,13 @@ def main(argv=None):
                     params[key] = getattr(args, key)
             if args.scenario:
                 params["scenarios"] = list(SCENARIOS) if "all" in args.scenario else args.scenario
-            source = SimulatedSource(speed=args.speed, **params)
+            if args.source == "unicorn":
+                if args.speed != 1 or args.scenario or args.sim_config or args.sample_rate or args.seed:
+                    raise ValueError("Unicorn en vivo requiere speed 1 y no acepta opciones del simulador")
+                from .sources.unicorn import UnicornSource
+                source = UnicornSource(args.sdk_path or "vendor/unicorn/python-api/Lib", args.device)
+            else:
+                source = SimulatedSource(speed=args.speed, **params)
             record = None if args.no_record else args.record or str(Path("sessions") / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]))
             config = Config.load(args.config)
         else:
@@ -148,7 +156,7 @@ def main(argv=None):
             source = ManualMarkedSource(source, args.marker_port)
             print(f"Marcadores escuchando en 127.0.0.1:{source.port}. Iniciar SIN música; usar mark music/reference en otra terminal. El programa no controla el audio.", flush=True)
         summary = run(source, config, record=record, osc_host=args.osc_host, osc_port=args.osc_port,
-                      osc=not args.no_osc, print_interval=0 if args.quiet else 1, display=args.display)
+                      osc=not args.no_osc, duration=args.duration if args.command == "run" and args.source == "unicorn" else None, print_interval=0 if args.quiet else 1, display=args.display)
         if args.display == "text":
             print(f"Finalizado: {summary['output_frames']} actualizaciones; {summary['valid_windows']} ventanas validas; {summary['invalid_windows']} descartadas.")
             print("Referencia personal: " + ("LISTA" if summary["baseline"]["ready"] else "PENDIENTE; faltaron ventanas validas"))
