@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neurovisual"
+version = "0.1.0"
+description = "Causal EEG descriptors, quality gates and OSC for an audiovisual hackathon"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26,<3", "scipy>=1.12,<2", "python-osc>=1.9,<2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+lsl = ["pylsl>=1.16,<2"]
+
+[project.scripts]
+neurovisual = "neurovisual.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["neurovisual*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

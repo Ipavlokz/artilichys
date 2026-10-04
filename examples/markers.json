@@ -1,0 +1,5 @@
+[
+  {"timestamp": 0, "condition": "reference", "label": "Referencia medida sin música"},
+  {"timestamp": 12, "condition": "music", "label": "Inicio real de música"},
+  {"timestamp": 24, "condition": "reference", "label": "Fin real de música"}
+]

@@ -1,0 +1,16 @@
+{
+  "duration": 45,
+  "sample_rate": 250,
+  "seed": 7,
+  "bands": {"theta": 8, "alpha": 12, "beta": 5},
+  "scenarios": ["blink", "muscle", "motion", "flat", "missing", "disconnect", "stalled"],
+  "schedule": {
+    "blink": [10, 10.4],
+    "muscle": [14, 15],
+    "motion": [18, 19],
+    "flat": [22, 24],
+    "missing": [26, 27],
+    "disconnect": [30, 32],
+    "stalled": [36, 38]
+  }
+}

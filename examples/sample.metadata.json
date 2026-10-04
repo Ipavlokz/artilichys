@@ -1,0 +1,20 @@
+{
+  "sample_rate": 100,
+  "channels": [
+    "ch1",
+    "ch2",
+    "ch3",
+    "ch4",
+    "ch5",
+    "ch6",
+    "ch7",
+    "ch8"
+  ],
+  "units": "uV",
+  "source": "example_csv",
+  "groups": {},
+  "auxiliary": {
+    "note": "Synthetic one-second example; not Unicorn metadata"
+  },
+  "schema_version": 1
+}
