@@ -67,3 +67,22 @@ def test_connection_failure_has_actionable_error():
     api.Unicorn = unavailable
     with pytest.raises(ValueError, match='Cerrar COMPLETAMENTE Unicorn Suite'):
         UnicornSource(sdk=api)
+
+
+@pytest.mark.parametrize('unit', ['uV', 'µV', 'μV', 'ÂµV', 'Î¼V'])
+def test_microvolt_spellings_preserve_amplitude(unit):
+    class Microvolts(Device):
+        def GetConfiguration(self):
+            cfg = super().GetConfiguration()
+            for channel in cfg.Channels[:8]:
+                channel.Unit = unit
+            return cfg
+    api = sdk()
+    api.Unicorn = Microvolts
+    source = UnicornSource(sdk=api)
+    try:
+        block = source.read(.3)
+        np.testing.assert_array_equal(block.samples[0], np.arange(7, -1, -1))
+        assert source.metadata.auxiliary['native_units'] == [unit]*8
+    finally:
+        source.close()

@@ -53,7 +53,10 @@ class UnicornSource(Source):
         eeg = list(cfg.Channels)[int(self.sdk.EEGConfigIndex):int(self.sdk.EEGConfigIndex)+int(self.sdk.EEGChannelsCount)]
         if len(eeg) != 8 or not all(c.Enabled for c in eeg):
             raise ValueError('La configuracion del Unicorn debe habilitar ocho canales EEG')
-        scales = {'uv': 1., 'µv': 1., 'μv': 1., 'mv': 1000., 'v': 1e6}
+        # Some Windows SDK builds decode UTF-8 micro signs as Windows-1252.
+        # Accept only identified spellings; never guess arbitrary units.
+        scales = {'uv': 1., 'µv': 1., 'μv': 1., 'âµv': 1., 'î¼v': 1.,
+                  'mv': 1000., 'v': 1e6}
         try:
             self.scales = np.array([scales[c.Unit.strip().lower()] for c in eeg])
         except KeyError as exc:
