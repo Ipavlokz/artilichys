@@ -370,14 +370,17 @@ Los saltos del contador conservan huecos temporales. Un contador repetido, reini
 una excepción detiene la adquisición y comunica desconexión; **reiniciar el programa para
 reconectar**. No hay reconexión automática de este adaptador inicial.
 
-La lectura nativa corre en un hilo para que el consumidor pueda retornar por timeout.
-Si una DLL retiene el GIL o queda bloqueada indefinidamente, esa garantía depende del SDK:
-verificar desconexión física en Windows; el cierre espera un segundo y no llama StopAcquisition
-concurrentemente con GetData. IMU y posiciones anatómicas no se usan todavía en este adaptador;
+La API y sus DLL se cargan en un **proceso separado**, con bloques de diez muestras.
+Esto impide que una llamada nativa que retenga el GIL bloquee el procesamiento o la salida OSC.
+El proceso principal retorna por timeout; tras cinco segundos sin muestras informa un fallo
+explícito y desconexión. Al cerrar espera dos segundos y termina el proceso hijo si quedó
+bloqueado. El SDK se conecta con un timeout de inicio de treinta segundos.
+IMU y posiciones anatómicas no se usan todavía en este adaptador;
 posterior/lateral quedan indisponibles hasta confirmar el montaje. No se interpreta el campo
 Validation Indicator sin comprobar su semántica en el hardware.
 
 **Verificado aquí:** interfaz contra un SDK de prueba, orden de canales, conversión mV→uV,
-contador con pérdida de muestras y notificación de pérdida de conexión. **Pendiente:** carga
+contador con pérdida de muestras, notificación de pérdida de conexión, adquisición continua
+en proceso separado junto al procesamiento, y cierre de un SDK bloqueado. **Pendiente:** carga
 real de DLL/licencia, ejecución del lanzador en Windows, adquisición Bluetooth y respuesta
 ante desconexión con el Unicorn conectado. No se afirma validación con hardware.

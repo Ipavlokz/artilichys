@@ -34,7 +34,8 @@ def run(source, config, record=None, osc_host="127.0.0.1", osc_port=9000, osc=Tr
             output.send(state["osc"])
         if print_interval > 0 and timestamp >= next_print:
             if display == "text":
-                print(readable_status(state, timestamp - origin), flush=True)
+                diagnostic = (f" | muestras_recibidas={source.samples_received}" if hasattr(source, "samples_received") else "")
+                print(readable_status(state, timestamp - origin) + diagnostic, flush=True)
             else:
                 print(json.dumps(clean({"t": round(timestamp - origin, 2), "connected": state["status"]["connected"],
                                     "stale": state["status"]["stale"], "quality": state["status"]["global_score"],

@@ -3,7 +3,7 @@ import time
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from neurovisual.sources.unicorn import UnicornSource, load_sdk
+from neurovisual.sources.unicorn import _SdkSource as UnicornSource, load_sdk
 
 
 class Device:
@@ -84,5 +84,77 @@ def test_microvolt_spellings_preserve_amplitude(unit):
         block = source.read(.3)
         np.testing.assert_array_equal(block.samples[0], np.arange(7, -1, -1))
         assert source.metadata.auxiliary['native_units'] == [unit]*8
+    finally:
+        source.close()
+
+
+def _process_stream(connection, path, serial, stop):
+    from neurovisual.model import SourceMetadata, Block
+    metadata = SourceMetadata(250., [f'E{i}' for i in range(8)], 'uV', 'unicorn',
+                              auxiliary={'sdk_version': 'test'})
+    connection.send(('metadata', metadata.to_dict()))
+    origin = time.monotonic()
+    n = 0
+    while not stop.is_set():
+        time.sleep(.04)
+        ts = origin + np.arange(n, n+10)/250
+        x = 15*np.sin(2*np.pi*10*(ts-origin))[:, None]*np.ones((1,8))
+        connection.send(('block', Block(ts, x, max(time.monotonic(),ts[-1]))))
+        n += 10
+    connection.close()
+
+
+def _process_hang(connection, path, serial, stop):
+    from neurovisual.model import SourceMetadata
+    connection.send(('metadata', SourceMetadata(250.,[f'E{i}' for i in range(8)],'uV','unicorn',
+                                               auxiliary={'sdk_version':'test'}).to_dict()))
+    time.sleep(30)  # Simulate a native call that does not honor stop.
+
+
+def test_spawned_acquisition_keeps_streaming_through_processing(tmp_path):
+    from neurovisual.sources.unicorn import UnicornSource as ProcessSource
+    from neurovisual.runner import run
+    from neurovisual.config import Config
+    source = ProcessSource(worker=_process_stream)
+    result = run(source, Config(window_seconds=2, baseline_seconds=1, settle_seconds=0),
+                 record=tmp_path/'session', osc=False, print_interval=0, duration=4)
+    assert source.samples_received >= 900
+    assert result['valid_windows'] > 0
+    assert result['baseline']['ready']
+    assert not source._process.is_alive()
+
+
+def test_blocked_sdk_does_not_block_consumer_and_can_be_terminated():
+    from neurovisual.sources.unicorn import UnicornSource as ProcessSource
+    source = ProcessSource(worker=_process_hang)
+    try:
+        start = time.monotonic()
+        assert source.read(.02) is None
+        assert time.monotonic()-start < .3
+        source._last_block -= 6
+        assert source.read(.01).connected is False
+        assert 'sin entregar muestras' in source.error
+    finally:
+        source.close()
+    assert not source._process.is_alive()
+
+
+def test_native_sdk_multi_sample_blocks_keep_order_and_time():
+    class Batch(Device):
+        def GetData(self, count, buffer, length):
+            time.sleep(count/250)
+            if self.n >= 20:
+                raise RuntimeError('end test')
+            rows = [list(range(8))+[self.n+i] for i in range(count)]
+            buffer[:] = struct.pack('<'+str(count*9)+'f', *np.array(rows).ravel())
+            self.n += count
+    api = sdk(); api.Unicorn = Batch
+    source = UnicornSource(sdk=api, frame_length=10)
+    try:
+        first, second = source.read(.3), source.read(.3)
+        assert first.samples.shape == (10,8)
+        np.testing.assert_array_equal(first.samples, np.tile(np.arange(7,-1,-1)*1000,(10,1)))
+        np.testing.assert_allclose(np.diff(np.r_[first.timestamps,second.timestamps]), .004, atol=1e-8)
+        assert first.timestamps[-1] <= first.received_at
     finally:
         source.close()

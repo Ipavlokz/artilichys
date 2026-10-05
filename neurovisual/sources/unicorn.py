@@ -1,4 +1,5 @@
 """Official UnicornPy adapter. Native SDK acquisition runs off the OSC thread."""
+import multiprocessing
 import importlib
 import os
 from pathlib import Path
@@ -29,8 +30,8 @@ def load_sdk(path):
         raise ValueError(f'No se pudo cargar UnicornPy: {exc}. Revisar licencia Python API y runtime Visual C++ x64.') from exc
 
 
-class UnicornSource(Source):
-    def __init__(self, sdk_path=None, serial=None, sdk=None):
+class _SdkSource(Source):
+    def __init__(self, sdk_path=None, serial=None, sdk=None, frame_length=1):
         self.sdk = sdk if sdk is not None else load_sdk(sdk_path)
         try:
             devices = list(self.sdk.GetAvailableDevices(True) or [])
@@ -61,6 +62,7 @@ class UnicornSource(Source):
             self.scales = np.array([scales[c.Unit.strip().lower()] for c in eeg])
         except KeyError as exc:
             raise ValueError(f'Unidad EEG no reconocida: {exc}') from exc
+        self.frame_length = frame_length
         self.count = int(self.device.GetNumberOfAcquiredChannels())
         self.indices = [int(self.device.GetChannelIndex(c.Name)) for c in eeg]
         self.counter = int(self.device.GetChannelIndex(cfg.Channels[int(self.sdk.CounterConfigIndex)].Name))
@@ -70,7 +72,8 @@ class UnicornSource(Source):
             auxiliary={'serial': serial, 'sdk_version': str(self.sdk.GetApiVersion()),
                        'native_units': [c.Unit for c in eeg],
                        'timestamp_method': 'sample counter anchored to host monotonic reception',
-                       'imu_available': False, 'anatomical_positions_confirmed': False})
+                       'imu_available': False, 'anatomical_positions_confirmed': False,
+                       'acquisition_block_samples': frame_length, 'sdk_process_isolated': True})
         self.metadata.validate()
         self.finished = False
         self._queue = queue.Queue()
@@ -88,25 +91,27 @@ class UnicornSource(Source):
         try:
             self.device.StartAcquisition(False)
             started = True
-            buffer = bytearray(self.count * 4)
+            buffer = bytearray(self.frame_length * self.count * 4)
             while not self._stop.is_set():
-                self.device.GetData(1, buffer, len(buffer))
-                row = np.frombuffer(buffer, dtype=np.float32).copy()
+                self.device.GetData(self.frame_length, buffer, len(buffer))
+                rows = np.frombuffer(buffer, dtype=np.float32).reshape(self.frame_length, self.count).copy()
                 received = self.now()
-                counter = float(row[self.counter])
-                if not np.isfinite(counter):
-                    raise ValueError('Contador de muestras no finito')
-                if previous is None:
-                    timestamp = received
-                else:
-                    delta = counter - previous
-                    if delta <= 0:
-                        raise ValueError('Contador reiniciado o repetido; reiniciar sesion para reconectar')
-                    timestamp += delta / self.metadata.sample_rate
-                previous = counter
-                # No wall-clock jitter is hidden by changing sample spacing.
+                timestamps = []
+                for index, row in enumerate(rows):
+                    counter = float(row[self.counter])
+                    if not np.isfinite(counter):
+                        raise ValueError('Contador de muestras no finito')
+                    if previous is None:
+                        timestamp = received - (len(rows)-1-index)/self.metadata.sample_rate
+                    else:
+                        delta = counter - previous
+                        if delta <= 0:
+                            raise ValueError('Contador reiniciado o repetido; reiniciar sesion para reconectar')
+                        timestamp += delta / self.metadata.sample_rate
+                    previous = counter
+                    timestamps.append(timestamp)
                 received = max(received, timestamp)
-                self._queue.put(Block(np.array([timestamp]), (row[self.indices]*self.scales)[None, :], received))
+                self._queue.put(Block(np.array(timestamps), rows[:, self.indices]*self.scales, received))
         except Exception as exc:
             self.error = str(exc)
             print(f'Unicorn: adquisicion detenida: {exc}. Reiniciar para reconectar.', file=sys.stderr, flush=True)
@@ -129,3 +134,97 @@ class UnicornSource(Source):
         self._thread.join(timeout=1)
         # A stuck native call cannot be safely killed from Python. The daemon
         # exits with the process; never StopAcquisition concurrently with GetData.
+
+
+def _sdk_worker(connection, sdk_path, serial, stop, source_factory=_SdkSource):
+    """Windows spawn entry point: native library is loaded only in this process."""
+    source = None
+    try:
+        source = source_factory(sdk_path=sdk_path, serial=serial, frame_length=10)
+        connection.send(('metadata', source.metadata.to_dict()))
+        while not stop.is_set():
+            block = source.read(.1)
+            if block is not None:
+                connection.send(('block', block))
+                if not block.connected:
+                    connection.send(('error', getattr(source, 'error', 'Adquisicion detenida')))
+                    break
+    except Exception as exc:
+        try:
+            connection.send(('error', str(exc)))
+        except (BrokenPipeError, EOFError, OSError):
+            pass
+    finally:
+        if source is not None:
+            source.close()
+        connection.close()
+
+
+class UnicornSource(Source):
+    """DSP and OSC never share a Python GIL with the native acquisition DLL."""
+    def __init__(self, sdk_path=None, serial=None, worker=_sdk_worker):
+        context = multiprocessing.get_context('spawn')
+        self._connection, child = context.Pipe(duplex=False)
+        self._stop = context.Event()
+        self._process = context.Process(target=worker, args=(child, sdk_path, serial, self._stop), daemon=True)
+        self.finished = False
+        self.error = None
+        self._failed = False
+        self._last_block = time.monotonic()
+        self.samples_received = 0
+        try:
+            self._process.start()
+            child.close()
+            if not self._connection.poll(30):
+                raise ValueError('El SDK no respondio en 30 segundos al conectar. Cerrar Suite y revisar Bluetooth/licencia.')
+            kind, payload = self._connection.recv()
+            if kind != 'metadata':
+                raise ValueError(str(payload))
+            self.metadata = SourceMetadata(**payload)
+            self.metadata.validate()
+            self._last_block = self.now()
+            print(f'Unicorn: API {self.metadata.auxiliary["sdk_version"]}, '
+                  f'{self.metadata.sample_rate:g} Hz; adquisicion en proceso separado, bloques de 10 muestras.', flush=True)
+        except BaseException:
+            child.close()
+            self.close()
+            raise
+
+    def now(self):
+        return time.monotonic()
+
+    def _failure(self, message):
+        self._failed = True
+        self.error = message
+        print(f'Unicorn: {message}. Detener y reiniciar la sesion.', file=sys.stderr, flush=True)
+        self._stop.set()
+        return Block.empty(self.now(), connected=False)
+
+    def read(self, timeout):
+        if self._failed:
+            time.sleep(max(0, timeout))
+            return None
+        try:
+            if self._connection.poll(max(0, timeout)):
+                kind, payload = self._connection.recv()
+                if kind == 'block':
+                    self._last_block = self.now()
+                    self.samples_received += len(payload.timestamps)
+                    return payload
+                return self._failure(str(payload))
+            if not self._process.is_alive():
+                return self._failure(f'Proceso de adquisicion finalizado (codigo {self._process.exitcode})')
+            if self.now() - self._last_block > 5:
+                return self._failure('El SDK lleva 5 segundos sin entregar muestras; posible bloqueo de lectura o perdida Bluetooth')
+            return None
+        except (EOFError, OSError) as exc:
+            return self._failure(f'Canal de adquisicion cerrado: {exc}')
+
+    def close(self):
+        self._stop.set()
+        if self._process.pid is not None:
+            self._process.join(timeout=2)
+            if self._process.is_alive():
+                self._process.terminate()
+                self._process.join(timeout=2)
+        self._connection.close()
