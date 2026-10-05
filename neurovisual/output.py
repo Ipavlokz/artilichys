@@ -5,7 +5,7 @@ from pythonosc.udp_client import UDPClient
 from .contracts import DEFAULT_OSC_ADDRESSES, FEATURE_KEYS
 
 
-def messages(status, features, events, visual, visual_addresses=None):
+def messages(status, features, events, visual, visual_addresses=None, gestures=None):
     addresses = DEFAULT_OSC_ADDRESSES if visual_addresses is None else visual_addresses
     result = {
         "/neuro/connected": int(status["connected"]),
@@ -23,6 +23,11 @@ def messages(status, features, events, visual, visual_addresses=None):
     result.update({f"/neuro/event/{key}": int(events.get(key, 0)) for key in ("blink", "muscle", "reconnect")})
     result.update({addresses[key]: int(value) if key in ("scene", "pulse") else float(value)
                    for key, value in visual.items()})
+    if gestures is not None:
+        result.update({"/gesture/blink": float(gestures["blink"]),
+                       "/gesture/jaw": float(gestures["jaw"]),
+                       "/gesture/blink/available": int(gestures["blink_available"]),
+                       "/gesture/jaw/available": int(gestures["jaw_available"])})
     return result
 
 

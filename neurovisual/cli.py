@@ -19,6 +19,7 @@ def json_file(path):
 
 
 def output_options(parser):
+    parser.add_argument("--frontal-channels", nargs="+", help="Nombres exactos de canales frontales CONFIRMADOS para parpadeos")
     parser.add_argument("--config", help="Configuración JSON: procesamiento, reglas visuales y nombres OSC")
     parser.add_argument("--record", help="Directorio nuevo de sesión")
     parser.add_argument("--osc-host", default="127.0.0.1")
@@ -150,6 +151,13 @@ def main(argv=None):
             base = (Config(**session_manifest(args.path)["config"])
                     if Path(args.path).suffix.lower() != ".csv" else Config())
             config = Config.load(args.config, base=base)
+        if args.frontal_channels:
+            source.metadata.groups = {**source.metadata.groups, "frontal": args.frontal_channels}
+            try:
+                source.metadata.validate()
+            except ValueError:
+                source.close()
+                raise
         if args.markers:
             source = MarkedSource(source, args.markers)
         if args.manual_markers:

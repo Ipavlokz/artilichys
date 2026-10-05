@@ -384,3 +384,60 @@ contador con pérdida de muestras, notificación de pérdida de conexión, adqui
 en proceso separado junto al procesamiento, y cierre de un SDK bloqueado. **Pendiente:** carga
 real de DLL/licencia, ejecución del lanzador en Windows, adquisición Bluetooth y respuesta
 ante desconexión con el Unicorn conectado. No se afirma validación con hardware.
+
+### Controles independientes de parpadeo y actividad muscular
+
+Se emiten cuatro direcciones OSC adicionales, separadas de bandas EEG y controles artísticos:
+
+| Dirección | Valor y significado |
+|---|---|
+| `/gesture/blink` | 0 o 1 (float); pulso de 200 ms por parpadeo **sospechoso** |
+| `/gesture/jaw` | 0 o 1 (float); actividad muscular **sospechosa** en los últimos 0.5 s |
+| `/gesture/blink/available` | 1 si se han declarado canales frontales; 0 si faltan |
+| `/gesture/jaw/available` | 1: detector muscular disponible; no garantiza identificación de mandíbula |
+
+`jaw` es un nombre de control artístico: usa el detector muscular y no distingue mandíbula,
+frente, cuello u otros músculos. No mide fuerza de mordida ni emociones. Ambos controles
+funcionan sin esperar calibración EEG y pueden activarse cuando la ventana EEG es inválida
+por artefactos; regresan a cero con datos detenidos o desconexión. Se conservan las direcciones
+anteriores `/neuro/event/blink`, `/neuro/event/muscle` y `/visual/pulse`.
+
+En el Unicorn, la posición de los canales aún no está confirmada. Para parpadeos se debe
+configurar explícitamente el grupo frontal, sin suponer que EEG 1 o EEG 2 lo son:
+
+```powershell
+.\.venv\Scripts\python.exe -m neurovisual run --source unicorn --display text --frontal-channels "NOMBRE FRONTAL CONFIRMADO"
+```
+
+Reemplazar el marcador por el nombre exacto del canal frontal declarado por el SDK; se pueden
+pasar varios nombres entre comillas. También funciona en replay y se guarda en metadatos.
+En simulación ya existe un grupo frontal. Mientras falte el mapa real, el control blink se
+publica en cero con available=0.
+
+En TouchDesigner crear dos Select CHOP con Channel Names `gesture/blink` y `gesture/jaw`.
+Para una transición gradual, añadir Lag CHOP (0.1 s) y Limit CHOP (Clamp 0–1), después Null.
+Probar parpadeos y tensión breve de mandíbula por separado, sin movimiento del casco, y
+comprobar falsos positivos antes de usarlos en la demo. No aumentar umbrales para ocultar ruido.
+
+El montaje informado por el equipo es Fz, Cz, C3, C4, Pz, Oz, PO8 y PO7.
+**Verificar si esa lista es también el orden EEG 1–8 del SDK.** Si lo es, Fz es EEG 1
+(y no EEG 2). Fz puede captar parpadeos, pero no es un electrodo frontal polar y no
+se promete identificación específica. El lanzador admite opciones adicionales:
+
+```powershell
+.\CONECTAR_UNICORN.cmd --frontal-channels "EEG 1"
+```
+
+Usar ese comando solo después de confirmar dicha correspondencia. La detección se debe
+comprobar con varios parpadeos aislados y movimientos de mandíbula separados.
+
+Mandíbula sostenida: `/gesture/jaw` permanece en 1 mientras haya actividad muscular
+sospechosa; tolera interrupciones breves mediante `jaw_release_seconds` (0.25 s por defecto).
+No es un pulso ni una medida de fuerza. Tras relajarse vuelve a cero aproximadamente tras
+la ventana muscular de 0.5 s y el tiempo de liberación; se anula inmediatamente si hay stale
+o desconexión. El parámetro puede cambiarse en configuración JSON.
+
+Si no funciona blink, comprobar primero `gesture/blink/available` en OSC In CHOP:
+0 significa que falta declarar Fz/canales frontales, no que el detector esté calibrando.
+Si es 1 pero no aparecen pulsos, revisar una grabación con parpadeos aislados antes de ajustar
+`blink_uv`; no bajar el umbral sin comprobar falsos positivos. El umbral inicial es 100 uV.

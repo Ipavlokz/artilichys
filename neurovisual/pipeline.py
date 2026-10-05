@@ -43,6 +43,8 @@ class Pipeline:
         self.pending = {key: 0 for key in ("blink", "muscle", "reconnect")}
         self.active = {"blink": False, "muscle": False}
         self.last_event = {"blink": -np.inf, "muscle": -np.inf}
+        self.gesture_jaw_until = -np.inf
+        self.gesture_blink_until = -np.inf
         self.last_artifact = -np.inf
         self.quality = Quality([0.0] * 8, 0.0, 0.0, ["no_data"], False, False)
         self.normalized = {key: 0.5 for key in FEATURE_KEYS}
@@ -56,9 +58,13 @@ class Pipeline:
 
     def event(self, kind, timestamp):
         self.pending[kind] = 1
+        if kind == "blink":
+            self.gesture_blink_until = timestamp + 0.2
         self.log("events", {"timestamp": timestamp, "kind": kind, "suspected": kind != "reconnect"})
 
     def reset_signal(self):
+        self.gesture_jaw_until = -np.inf
+        self.gesture_blink_until = -np.inf
         self.filter.reset()
         self.timestamps = np.empty(0)
         self.raw = np.empty((0, 8))
@@ -122,6 +128,8 @@ class Pipeline:
             self.timestamps[keep], self.raw[keep], self.processed[keep], self.imu[keep])
         recent = self.raw[-max(4, int(fs * 0.5)):]
         flags = detect(recent, fs, self.metadata.groups, self.metadata, self.config)
+        if flags["muscle"]:
+            self.gesture_jaw_until = block.received_at + self.config.jaw_release_seconds
         for kind, active in flags.items():
             if active:
                 self.last_artifact = block.received_at
@@ -187,9 +195,17 @@ class Pipeline:
         # Blink is a separate physical event, allowed even when its EEG window is rejected.
         visual["pulse"] = int(events["blink"] and self.connected and not stale)
         self.pending = {key: 0 for key in self.pending}
-        values = messages(status, self.normalized, events, visual, self.config.visual_addresses)
+        gestures = {
+            # Hold blink for 200 ms so a renderer can see it across OSC frames.
+            "blink": float(not stale and bool(self.metadata.groups.get("frontal"))
+                           and self.last_event["blink"] <= now < self.gesture_blink_until),
+            "jaw": float(not stale and now < self.gesture_jaw_until),
+            "blink_available": bool(self.metadata.groups.get("frontal")),
+            "jaw_available": True,
+        }
+        values = messages(status, self.normalized, events, visual, self.config.visual_addresses, gestures)
         result = {"timestamp": now, "status": status, "features": self.normalized.copy(),
-                  "events": events, "visual": visual, "osc": values}
+                  "events": events, "visual": visual, "gestures": gestures, "osc": values}
         self.log("controls", result)
         return result
 

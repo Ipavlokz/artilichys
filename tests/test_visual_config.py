@@ -121,7 +121,7 @@ def test_renamed_visual_messages_arrive_over_udp_without_renaming_eeg():
         finally:
             output.close()
     values = {item.message.address: item.message.params[0] for item in OscPacket(packet).messages}
-    assert len(values) == 32
+    assert len(values) == 36
     assert "/visual/color" not in values and values["/arte/tono"] == 0.5
     assert "/neuro/alpha" in values and "/neuro/quality/ch8" in values
     assert isinstance(values["/arte/tono"], float)

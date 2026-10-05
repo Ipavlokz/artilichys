@@ -31,6 +31,7 @@ class Config:
     hold_seconds: float = 1.0
     idle_seconds: float = 2.0
     event_refractory: float = 0.5
+    jaw_release_seconds: float = 0.25
     visual_mapping: dict = field(default_factory=dict)
     osc_addresses: dict = field(default_factory=dict)
 
@@ -71,8 +72,8 @@ class Config:
             if (not isinstance(address, str) or len(address) > 128
                     or re.fullmatch(r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", address) is None):
                 raise ValueError(f"Dirección OSC inválida para {control}: comenzar con /, sin espacios/patrones, máximo 128 caracteres")
-            if address == "/neuro" or address.startswith("/neuro/"):
-                raise ValueError("Las direcciones /neuro están reservadas para descriptores y estado EEG")
+            if address in ("/neuro", "/gesture") or address.startswith(("/neuro/", "/gesture/")):
+                raise ValueError("Las direcciones /neuro y /gesture están reservadas para estado EEG y gestos")
         if len(set(self.visual_addresses.values())) != len(VISUAL_KEYS):
             raise ValueError("Direcciones OSC duplicadas: cada control necesita una dirección distinta")
 
@@ -89,7 +90,7 @@ class Config:
             raise ValueError("Las bandas de esta fase requieren low_hz <= 4 y high_hz >= 40")
         positive = ["window_seconds", "feature_hz", "output_hz", "notch_q", "stale_seconds",
                     "flat_uv", "amplitude_uv", "blink_uv", "muscle_rms_uv", "motion_g",
-                    "baseline_seconds", "smooth_seconds", "idle_seconds", "event_refractory"]
+                    "baseline_seconds", "smooth_seconds", "idle_seconds", "event_refractory", "jaw_release_seconds"]
         if any(getattr(self, key) <= 0 for key in positive):
             raise ValueError("Duraciones, frecuencias y umbrales deben ser positivos")
         if self.settle_seconds < 0 or self.hold_seconds < 0:
